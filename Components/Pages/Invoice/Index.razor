@@ -1,4 +1,7 @@
 ﻿@page "/invoice"
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 
 <h3>Invoice</h3>
@@ -90,85 +93,56 @@
             </div>
         </form>
 
-        <section class="recent-invoice-section mb-5" aria-labelledby="recent-invoice-heading">
-            <div class="mb-3">
-                <h2 id="recent-invoice-heading" class="h5 mb-1">Recent Invoice</h2>
-                <p class="text-muted small mb-0">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
-            </div>
+        @* @if (user?.IsInRole("Admin") == true) *@
+        {
+            <section class="recent-invoice-section mb-5" aria-labelledby="recent-invoice-heading">
+                <div class="mb-3">
+                    <h2 id="recent-invoice-heading" class="h5 mb-1">Recent Invoice</h2>
+                    <p class="text-muted small mb-0">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+                </div>
 
-            <div class="table-responsive shadow-sm bg-white rounded">
-                <table class="table table-hover mb-0 align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th scope="col">ID</th>
-                            <th scope="col">Patient Name</th>
-                            <th scope="col">Lab Name</th>
-                            <th scope="col">Ward Number</th>
-                            <th scope="col">Doctor</th>
-                            <th scope="col">Treatment</th>
-                            <th scope="col">Total Amount</th>
-                            <th scope="col" class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td>Sapooth</td>
-                            <td>Blood lab</td>
-                            <td>1</td>
-                            <td>Dr.Rajitha</td>
-                            <td>Dengue</td>
-                            <td>15,000.00</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-outline-primary me-1" aria-label="Edit invoice 1">Edit</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Delete invoice 1">Delete</button>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>2</td>
-                            <td>Sapooth</td>
-                            <td>Blood lab</td>
-                            <td>1</td>
-                            <td>Dr.Rajitha</td>
-                            <td>Dengue</td>
-                            <td>15,000.00</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-outline-primary me-1" aria-label="Edit invoice 2">Edit</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Delete invoice 2">Delete</button>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>3</td>
-                            <td>Sapooth</td>
-                            <td>Blood lab</td>
-                            <td>1</td>
-                            <td>Dr.Rajitha</td>
-                            <td>Dengue</td>
-                            <td>15,000.00</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-outline-primary me-1" aria-label="Edit invoice 3">Edit</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Delete invoice 3">Delete</button>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>4</td>
-                            <td>Sapooth</td>
-                            <td>Blood lab</td>
-                            <td>1</td>
-                            <td>Dr.Rajitha</td>
-                            <td>Dengue</td>
-                            <td>15,000.00</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-outline-primary me-1" aria-label="Edit invoice 4">Edit</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Delete invoice 4">Delete</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
+                <div class="table-responsive shadow-sm bg-white rounded">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">ID</th>
+                                <th scope="col">Patient Name</th>
+                                <th scope="col">Lab Name</th>
+                                <th scope="col">Ward Number</th>
+                                <th scope="col">Doctor</th>
+                                <th scope="col">Treatment</th>
+                                <th scope="col">Total Amount</th>
+                                <th scope="col" class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>Sapooth</td>
+                                <td>Blood lab</td>
+                                <td>1</td>
+                                <td>Dr.Rajitha</td>
+                                <td>Dengue</td>
+                                <td>15,000.00</td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-1" aria-label="Edit invoice 1">Edit</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Delete invoice 1">Delete</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
     </section>
 </main>
+
+@* @code {
+    private ClaimsPrincipal? user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        user = authState.User;
+    }
+} *@
