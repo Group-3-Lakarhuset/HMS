@@ -4,6 +4,7 @@ using HMS.Data;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Radzen;
 using YourAppNamespace.Services;
 
 var builder = WebApplication.CreateBuilder(args);
