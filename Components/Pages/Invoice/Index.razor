@@ -130,6 +130,7 @@
                                 <td>Dengue</td>
                                 <td>15,000.00</td>
                                 <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-primary me-1" @onclick="TransactionInvoice">Pay</button>
                                 <button type="button" class="btn btn-sm btn-outline-primary me-1" @onclick="DetailsInvoice">Details</button>
                                 <button type="button" class="btn btn-sm btn-outline-primary me-1" @onclick="EditInvoice">Edit</button>
                                 <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Delete invoice 1">Delete</button>
@@ -144,6 +145,11 @@
 </main>
 
 @code {
+    private void TransactionInvoice()
+    {
+        Navigation.NavigateTo($"/invoice/transaction");
+    }
+
     private void DetailsInvoice()
     {
         Navigation.NavigateTo($"/invoice/details");
