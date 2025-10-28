@@ -77,7 +77,7 @@
                         <option value="0" disabled selected>Select Patient</option>
                         @foreach (var patient in patients)
                         {
-                            <option value="@patient.Id">@patient.FirstName @patient.LastName</option>
+                            <option value="@patient.Id">@patient.User.FirstName @patient.User.LastName</option>
                         }
                     </InputSelect>
                 </div>
@@ -250,7 +250,7 @@
                         <div class="table-row">
                             <div class="table-cell">#@appointment.Id</div>
                             <div class="table-cell">
-                                <i class="bi bi-person-circle"></i> @appointment.Patient?.FirstName @appointment.Patient?.LastName
+                                <i class="bi bi-person-circle"></i> @appointment.Patient?.User.FirstName @appointment.Patient?.User.LastName
                             </div>
                             <div class="table-cell">
                                 <i class="bi bi-person-badge"></i> Dr. @(appointment.Staff?.User?.FirstName ?? "") @(appointment.Staff?.User?.LastName ?? "")
