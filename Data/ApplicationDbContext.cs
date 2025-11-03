@@ -17,6 +17,7 @@ namespace HMS.Data
         public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<Appointment> Appointments { get; set; }
+        public DbSet<Leave> Leaves { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -71,32 +72,41 @@ namespace HMS.Data
 
             builder.Entity<TimeReport>(entity =>
             {
-                // One Staff -> many TimeReports (this can stay one-to-many)
+                
                 entity.HasOne(e => e.Staff)
                     .WithMany(c => c.TimeReports)
                     .HasForeignKey(e => e.StaffId)
                     .OnDelete(DeleteBehavior.Restrict);
 
-                // One Schedule -> one TimeReport
+                
                 entity.HasOne(e => e.Schedule)
                     .WithOne(c => c.TimeReport)
                     .HasForeignKey<TimeReport>(e => e.ScheduleId)
-                    .OnDelete(DeleteBehavior.Restrict); // prevent cascade loop
+                    .OnDelete(DeleteBehavior.Restrict); 
             });
 
             builder.Entity<Invoice>(entity =>
             {
-                // One Patient -> many Invoices
+               
                 entity.HasOne(e => e.Patient)
                     .WithMany(c => c.Invoices)
                     .HasForeignKey(e => e.PatientId)
-                    .OnDelete(DeleteBehavior.Restrict); // prevent multiple cascade paths
+                    .OnDelete(DeleteBehavior.Restrict); 
 
-                // One Appointment -> one Invoice
+               
                 entity.HasOne(e => e.Appointment)
                     .WithOne(c => c.Invoice)
                     .HasForeignKey<Invoice>(e => e.AppointmentId)
-                    .OnDelete(DeleteBehavior.Restrict); // safer, avoids loops
+                    .OnDelete(DeleteBehavior.Restrict); 
+            });
+            // LEAVES
+         
+            builder.Entity<Leave>(entity =>
+            {
+                entity.HasOne(e => e.Staff)
+                .WithMany(c => c.Leaves)
+                .HasForeignKey(entity => entity.StaffId)
+                .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

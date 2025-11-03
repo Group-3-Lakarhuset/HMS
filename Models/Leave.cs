@@ -3,7 +3,7 @@
 public class Leave
 {
     public int Id { get; set; }
-    public int staffId { get; set; }
+    public int StaffId { get; set; }
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
     public string LeaveType { get; set; }
