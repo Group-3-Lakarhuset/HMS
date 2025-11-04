@@ -18,9 +18,6 @@ namespace HMS.Services
 
         #region Patient Management
 
-        /// <summary>
-        /// Get all patients with their user information
-        /// </summary>
         public async Task<List<Patient>> GetAllPatientsAsync()
         {
             return await _context.Patients
@@ -31,9 +28,6 @@ namespace HMS.Services
                 .ToListAsync();
         }
 
-        /// <summary>
-        /// Get patient by ID
-        /// </summary>
         public async Task<Patient?> GetPatientByIdAsync(int patientId)
         {
             return await _context.Patients
@@ -45,9 +39,6 @@ namespace HMS.Services
                 .FirstOrDefaultAsync(p => p.Id == patientId);
         }
 
-        /// <summary>
-        /// Create a new patient with user account
-        /// </summary>
         public async Task<(bool Success, string Message, Patient? Patient)> CreatePatientAsync(
             string email,
             string password,
@@ -63,7 +54,6 @@ namespace HMS.Services
         {
             try
             {
-                // Create the user account first
                 var user = new ApplicationUser
                 {
                     UserName = email,
@@ -83,7 +73,6 @@ namespace HMS.Services
                     return (false, $"Failed to create user account: {errors}", null);
                 }
 
-                // Create the patient record
                 var patient = new Patient
                 {
                     UserId = user.Id,
@@ -108,9 +97,6 @@ namespace HMS.Services
             }
         }
 
-        /// <summary>
-        /// Update an existing patient
-        /// </summary>
         public async Task<bool> UpdatePatientAsync(Patient patient)
         {
             try
@@ -126,9 +112,6 @@ namespace HMS.Services
             }
         }
 
-        /// <summary>
-        /// Delete a patient and their user account
-        /// </summary>
         public async Task<(bool Success, string Message)> DeletePatientAsync(int patientId)
         {
             try
@@ -142,15 +125,12 @@ namespace HMS.Services
                 if (patient == null)
                     return (false, "Patient not found");
 
-                // Check if patient has appointments
                 if (patient.Appointments.Any())
                     return (false, "Cannot delete patient with existing appointments");
 
-                // Check if patient has invoices
                 if (patient.Invoices.Any())
                     return (false, "Cannot delete patient with existing invoices");
 
-                // Remove patient (cascade will delete user due to FK configuration)
                 _context.Patients.Remove(patient);
                 await _context.SaveChangesAsync();
 
@@ -166,9 +146,6 @@ namespace HMS.Services
 
         #region Staff Management
 
-        /// <summary>
-        /// Get all staff members with their user information
-        /// </summary>
         public async Task<List<Staff>> GetAllStaffAsync()
         {
             return await _context.Staff
@@ -179,9 +156,6 @@ namespace HMS.Services
                 .ToListAsync();
         }
 
-        /// <summary>
-        /// Get staff by ID
-        /// </summary>
         public async Task<Staff?> GetStaffByIdAsync(int staffId)
         {
             return await _context.Staff
@@ -194,9 +168,6 @@ namespace HMS.Services
                 .FirstOrDefaultAsync(s => s.Id == staffId);
         }
 
-        /// <summary>
-        /// Create a new staff member with user account
-        /// </summary>
         public async Task<(bool Success, string Message, Staff? Staff)> CreateStaffAsync(
             string email,
             string password,
@@ -214,7 +185,6 @@ namespace HMS.Services
         {
             try
             {
-                // Create the user account first
                 var user = new ApplicationUser
                 {
                     UserName = email,
@@ -234,7 +204,6 @@ namespace HMS.Services
                     return (false, $"Failed to create user account: {errors}", null);
                 }
 
-                // Create the staff record
                 var staff = new Staff
                 {
                     UserId = user.Id,
@@ -260,9 +229,6 @@ namespace HMS.Services
             }
         }
 
-        /// <summary>
-        /// Update an existing staff member
-        /// </summary>
         public async Task<bool> UpdateStaffAsync(Staff staff)
         {
             try
@@ -278,9 +244,6 @@ namespace HMS.Services
             }
         }
 
-        /// <summary>
-        /// Delete a staff member and their user account
-        /// </summary>
         public async Task<(bool Success, string Message)> DeleteStaffAsync(int staffId)
         {
             try
@@ -294,15 +257,12 @@ namespace HMS.Services
                 if (staff == null)
                     return (false, "Staff member not found");
 
-                // Check if staff has appointments
                 if (staff.Appointments.Any())
                     return (false, "Cannot delete staff member with existing appointments");
 
-                // Check if staff has schedules
                 if (staff.Schedules.Any())
                     return (false, "Cannot delete staff member with existing schedules");
 
-                // Remove staff (cascade will delete user due to FK configuration)
                 _context.Staff.Remove(staff);
                 await _context.SaveChangesAsync();
 
@@ -318,9 +278,6 @@ namespace HMS.Services
 
         #region Schedule Management
 
-        /// <summary>
-        /// Get all schedules with staff information
-        /// </summary>
         public async Task<List<Schedule>> GetAllSchedulesAsync()
         {
             return await _context.Schedules
@@ -332,9 +289,6 @@ namespace HMS.Services
                 .ToListAsync();
         }
 
-        /// <summary>
-        /// Get schedule by ID
-        /// </summary>
         public async Task<Schedule?> GetScheduleByIdAsync(int scheduleId)
         {
             return await _context.Schedules
@@ -345,9 +299,6 @@ namespace HMS.Services
                 .FirstOrDefaultAsync(s => s.Id == scheduleId);
         }
 
-        /// <summary>
-        /// Get schedules by staff ID
-        /// </summary>
         public async Task<List<Schedule>> GetSchedulesByStaffIdAsync(int staffId)
         {
             return await _context.Schedules
@@ -357,21 +308,15 @@ namespace HMS.Services
                 .ToListAsync();
         }
 
-        // Add these methods to your AdminService class
 
-        /// <summary>
-        /// Create a new schedule using Schedule entity
-        /// </summary>
         public async Task<Schedule?> CreateScheduleAsync(Schedule schedule)
         {
             try
             {
-                // Validate staff exists
                 var staffExists = await _context.Staff.AnyAsync(s => s.Id == schedule.StaffId);
                 if (!staffExists)
                     return null;
 
-                // Check for schedule conflicts
                 var hasConflict = await _context.Schedules
                     .AnyAsync(s => s.StaffId == schedule.StaffId &&
                                    ((s.StartTime <= schedule.StartTime && s.EndTime > schedule.StartTime) ||
@@ -394,9 +339,6 @@ namespace HMS.Services
             }
         }
 
-        /// <summary>
-        /// Update an existing schedule using Schedule entity
-        /// </summary>
         public async Task<bool> UpdateScheduleAsync(Schedule schedule)
         {
             try
@@ -412,9 +354,6 @@ namespace HMS.Services
             }
         }
 
-        /// <summary>
-        /// Delete a schedule and return boolean
-        /// </summary>
         public async Task<bool> DeleteScheduleAsync(int scheduleId)
         {
             try
@@ -427,11 +366,9 @@ namespace HMS.Services
                 if (schedule == null)
                     return false;
 
-                // Check if schedule has an appointment
                 if (schedule.Appointment != null)
                     return false;
 
-                // Check if schedule has a time report
                 if (schedule.TimeReport != null)
                     return false;
 
