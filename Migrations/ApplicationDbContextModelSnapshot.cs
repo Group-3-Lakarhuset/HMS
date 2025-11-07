@@ -64,8 +64,8 @@ namespace HMS.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("PersonalNumber")
-                        .HasColumnType("int");
+                    b.Property<string>("PersonalNumber")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
@@ -167,7 +167,7 @@ namespace HMS.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("AppointmentId")
+                    b.Property<int?>("AppointmentId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
@@ -199,7 +199,8 @@ namespace HMS.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AppointmentId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[AppointmentId] IS NOT NULL");
 
                     b.HasIndex("PatientId");
 
@@ -655,8 +656,7 @@ namespace HMS.Migrations
                     b.HasOne("HMS.Models.Appointment", "Appointment")
                         .WithOne("Invoice")
                         .HasForeignKey("HMS.Models.Invoice", "AppointmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("HMS.Models.Patient", "Patient")
                         .WithMany("Invoices")

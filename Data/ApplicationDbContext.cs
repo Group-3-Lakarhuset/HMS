@@ -1,14 +1,13 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using HMS.Models;
+using System.Reflection.Emit;
 
 namespace HMS.Data
 {
-    public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
+    public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
-        {
-        }
+
+
         public DbSet<Patient> Patients { get; set; }
         public DbSet<Staff> Staff { get; set; }
         public DbSet<Schedule> Schedules { get; set; }

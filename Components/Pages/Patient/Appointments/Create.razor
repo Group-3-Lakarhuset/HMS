@@ -1,4 +1,4 @@
-﻿@page "/admin/schedule"
+﻿@page "/patient/appointments/create"
 @using HMS.Models
 @using HMS.Services
 @inject AdminService AdminService
@@ -28,7 +28,20 @@
                 <div class="col-md-3">
                     <label class="form-label mb-1 small">Filter Staff</label>
                     <select class="form-select form-select-sm" @bind="selectedStaffId" @bind:after="FilterSchedules">
-                        <option value="0">All Staff</option>
+                        <option value="0">All Staff</option>private void OnAppointmentClick(int scheduleId)
+{
+    var schedule = allSchedules.FirstOrDefault(s => s.ScheduleId == scheduleId);
+    if (schedule != null && schedule.Status == "Available")
+    {
+        // Navigate to create appointment page, passing the schedule info
+        Navigation.NavigateTo($"/appointments/create?scheduleId={schedule.ScheduleId}&staffId={schedule.StaffId}&start={schedule.Start:o}&end={schedule.End:o}");
+    }
+    else
+    {
+        // If it's already booked, maybe navigate to details instead
+        Navigation.NavigateTo($"/admin/schedule/details/{scheduleId}");
+    }
+}
                         @foreach (var staff in staffList)
                         {
                             <option value="@staff.Value">@staff.Text</option>
@@ -583,7 +596,17 @@
 
     private void OnAppointmentClick(int scheduleId)
     {
-        Navigation.NavigateTo($"/admin/schedule/edit/{scheduleId}");
+        var schedule = allSchedules.FirstOrDefault(s => s.ScheduleId == scheduleId);
+        if (schedule != null && schedule.Status == "Available")
+        {
+            // Navigate to create appointment page, passing the schedule info
+            Navigation.NavigateTo($"/appointments/create?scheduleId={schedule.ScheduleId}&staffId={schedule.StaffId}&start={schedule.Start:o}&end={schedule.End:o}");
+        }
+        else
+        {
+            // If it's already booked, maybe navigate to details instead
+            Navigation.NavigateTo($"/admin/schedule/details/{scheduleId}");
+        }
     }
 
     private void SwitchToView(int viewIndex)
