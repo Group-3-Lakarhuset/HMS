@@ -2,7 +2,7 @@
 @using HMS.Models
 @using HMS.Services
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Policy = "AdminOrStaff")]
+@attribute [Authorize(Policy = "AdminOnly")]
 @inject AdminService AdminService
 @inject NavigationManager NavigationManager
 @rendermode InteractiveServer
