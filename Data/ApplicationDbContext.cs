@@ -1,14 +1,14 @@
+using HMS.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using HMS.Models;
+using System.Reflection.Emit;
 
 namespace HMS.Data
 {
-    public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
+    public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
-        {
-        }
+
+
         public DbSet<Patient> Patients { get; set; }
         public DbSet<Staff> Staff { get; set; }
         public DbSet<Schedule> Schedules { get; set; }
@@ -17,7 +17,7 @@ namespace HMS.Data
         public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<Appointment> Appointments { get; set; }
-        public DbSet<Leave> Leaves { get; set; }
+        //public DbSet<Leave> Leaves { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -101,13 +101,13 @@ namespace HMS.Data
             });
             // LEAVES
          
-            builder.Entity<Leave>(entity =>
+/*            builder.Entity<Leave>(entity =>
             {
                 entity.HasOne(e => e.Staff)
                 .WithMany(c => c.Leaves)
                 .HasForeignKey(entity => entity.StaffId)
                 .OnDelete(DeleteBehavior.Cascade);
-            });
+            });*/
         }
     }
 }

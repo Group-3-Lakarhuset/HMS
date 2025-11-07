@@ -10,8 +10,7 @@ namespace HMS.Data
         public Staff? Staff { get; set; }
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
-        public string? Role { get; set; }
-        public int? PersonalNumber { get; set; }
+        public string? PersonalNumber { get; set; }
     }
 
 }

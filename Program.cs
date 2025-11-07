@@ -20,6 +20,8 @@ builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<PatientService>();
 
 
 builder.Services.AddScoped<IStaffService, StaffService>();
@@ -43,11 +45,33 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
+// Add Authorization policies
+builder.Services.AddAuthorizationCore(options =>
+{
+    // Admin-only policy
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("Admin"));
+
+    // Admin or Staff policy
+    options.AddPolicy("AdminOrStaff", policy =>
+        policy.RequireRole("Admin", "Staff"));
+
+    // Admin or Patient policy
+    options.AddPolicy("AdminOrPatient", policy =>
+        policy.RequireRole("Admin", "Patient"));
+
+    // All authenticated users (Admin, Staff, Patient)
+    options.AddPolicy("Authenticated", policy =>
+        policy.RequireAuthenticatedUser());
+});
 builder.Services.AddRadzenComponents();
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+builder.Services.AddScoped<RoleSeedService>();
+builder.Services.AddScoped<UserSeedService>();
 
 
 builder.Services.AddControllers();
@@ -79,5 +103,16 @@ app.MapControllers();
 
 
 app.MapAdditionalIdentityEndpoints();
+// Seed roles and users on application startup
+using (var scope = app.Services.CreateScope())
+{
+    // Seed roles first
+    var roleSeedService = scope.ServiceProvider.GetRequiredService<RoleSeedService>();
+    await roleSeedService.SeedRolesAsync();
+
+    // Then seed users with roles
+    var userSeedService = scope.ServiceProvider.GetRequiredService<UserSeedService>();
+    await userSeedService.SeedUsersAsync();
+}
 
 app.Run();

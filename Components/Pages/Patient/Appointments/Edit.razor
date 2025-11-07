@@ -1,14 +1,9 @@
-﻿@page "/admin/schedule/edit/{ScheduleId:int}"
-@using HMS.Data
+﻿@* @page "/admin/schedule/edit/{ScheduleId:int}"
 @using HMS.Models
 @using HMS.Services
 @using System.ComponentModel.DataAnnotations
-@using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.Identity
 @inject AdminService AdminService
-@inject UserManager<ApplicationUser> UserManager
-@inject NavigationManager NavigationManager
-@attribute [Authorize(Policy = "AdminOnly")]
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 
 <div class="container mt-4">
@@ -91,9 +86,9 @@
                                     <label class="form-label">Start Time *</label>
                                     <input type="time"
                                            class="form-control"
-                                           value="@schedule.StartTimeString"
-                                           @onchange="(e) => HandleTimeChange(e, nameof(schedule.StartTimeString))" />
-                                    <ValidationMessage For="@(() => schedule.StartTimeString)" />
+                                           value="@schedule.StartTime.ToString(@"HH\:mm")"
+                                           @onchange="@((ChangeEventArgs e) => schedule.StartTime = TimeSpan.Parse(e.Value.ToString()))" />
+                                    <ValidationMessage For="@(() => schedule.StartTime)" />
                                 </div>
 
                                 <!-- End Time -->
@@ -101,9 +96,9 @@
                                     <label class="form-label">End Time *</label>
                                     <input type="time"
                                            class="form-control"
-                                           value="@schedule.EndTimeString"
-                                           @onchange="(e) => HandleTimeChange(e, nameof(schedule.EndTimeString))" />
-                                    <ValidationMessage For="@(() => schedule.EndTimeString)" />
+                                           value="@schedule.EndTime.ToString(@"HH\:mm")"
+                                           @onchange="@((ChangeEventArgs e) => schedule.EndTime = TimeSpan.Parse(e.Value.ToString()))" />
+                                    <ValidationMessage For="@(() => schedule.EndTime)" />
                                 </div>
 
                                 <!-- Break Start Time -->
@@ -111,8 +106,8 @@
                                     <label class="form-label">Break Start Time</label>
                                     <input type="time"
                                            class="form-control"
-                                           value="@schedule.BreakStartTimeString"
-                                           @onchange="(e) => HandleTimeChange(e, nameof(schedule.BreakStartTimeString))" />
+                                           value="@schedule.BreakStartTime.ToString(@"HH\:mm")"
+                                           @onchange="@((ChangeEventArgs e) => schedule.BreakStartTime = TimeSpan.Parse(e.Value.ToString()))" />
                                 </div>
 
                                 <!-- Break End Time -->
@@ -120,8 +115,8 @@
                                     <label class="form-label">Break End Time</label>
                                     <input type="time"
                                            class="form-control"
-                                           value="@schedule.BreakEndTimeString"
-                                           @onchange="(e) => HandleTimeChange(e, nameof(schedule.BreakEndTimeString))" />
+                                           value="@schedule.BreakEndTime.ToString(@"HH\:mm")"
+                                           @onchange="@((ChangeEventArgs e) => schedule.BreakEndTime = TimeSpan.Parse(e.Value.ToString()))" />
                                 </div>
 
                                 <!-- Status -->
@@ -129,10 +124,11 @@
                                     <label class="form-label">Status *</label>
                                     <InputSelect @bind-Value="schedule.Status" class="form-select">
                                         <option value="">Select Status</option>
-                                            <option value="Scheduled">Scheduled</option>
-                                            <option value="Active">Active</option>
-                                            <option value="Completed">Completed</option>
-                                            <option value="Cancelled">Cancelled</option>
+                                        <option value="Available">Available</option>
+                                        <option value="Booked">Booked</option>
+                                        <option value="Blocked">Blocked</option>
+                                        <option value="Completed">Completed</option>
+                                        <option value="Cancelled">Cancelled</option>
                                     </InputSelect>
                                     <ValidationMessage For="@(() => schedule.Status)" />
                                 </div>
@@ -211,7 +207,8 @@
             staffList = staffMembers.Select(s => new StaffSummary
             {
                 Id = s.Id,
-                FullName = s.User != null ? $"{s.User.FirstName} {s.User.LastName}".Trim() : "N/A"
+                FullName = s.User != null ? $"{s.User.FirstName} {s.User.LastName}".Trim() : "N/A",
+                Role = s.User?.Role ?? "N/A"
             }).ToList();
         }
         catch (Exception ex)
@@ -264,37 +261,6 @@
         }
     }
 
-    private void HandleTimeChange(ChangeEventArgs e, string propertyName)
-    {
-        var timeString = e.Value?.ToString();
-
-        if (string.IsNullOrEmpty(timeString))
-        {
-            // Set default time or leave as current value
-            return;
-        }
-
-        if (TimeSpan.TryParse(timeString, out var timeSpan))
-        {
-            switch (propertyName)
-            {
-                case nameof(ScheduleEditModel.StartTimeString):
-                    schedule.StartTimeString = timeString;
-                    break;
-                case nameof(ScheduleEditModel.EndTimeString):
-                    schedule.EndTimeString = timeString;
-                    break;
-                case nameof(ScheduleEditModel.BreakStartTimeString):
-                    schedule.BreakStartTimeString = timeString;
-                    break;
-                case nameof(ScheduleEditModel.BreakEndTimeString):
-                    schedule.BreakEndTimeString = timeString;
-                    break;
-            }
-            StateHasChanged();
-        }
-    }
-
     private async Task HandleSubmit()
     {
         try
@@ -322,7 +288,7 @@
 
             if (success)
             {
-                Navigation.NavigateTo("/admin/schedules");
+                Navigation.NavigateTo("/Admin/Schedule");
             }
             else
             {
@@ -338,17 +304,12 @@
 
     private double CalculateDuration()
     {
-        if (TimeSpan.TryParse(schedule.StartTimeString, out var startTime) &&
-            TimeSpan.TryParse(schedule.EndTimeString, out var endTime))
-        {
-            return (endTime - startTime).TotalHours;
-        }
-        return 0;
+        return (schedule.EndTime - schedule.StartTime).TotalHours;
     }
 
     private void Cancel()
     {
-        Navigation.NavigateTo("/admin/schedules");
+        Navigation.NavigateTo("/Admin/Schedule");
     }
 
     private void ViewDetails()
@@ -366,54 +327,25 @@
 
         [Required(ErrorMessage = "Schedule date is required")]
         [DataType(DataType.Date)]
-        public DateTime ScheduleDate { get; set; } = DateTime.Today;
+        public DateTime ScheduleDate { get; set; }
 
         [Required(ErrorMessage = "Start time is required")]
-        [RegularExpression(@"^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$", ErrorMessage = "Please enter a valid time in HH:mm format")]
-        public string StartTimeString { get; set; } = "09:00";
+        public TimeSpan StartTime { get; set; }
 
         [Required(ErrorMessage = "End time is required")]
-        [RegularExpression(@"^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$", ErrorMessage = "Please enter a valid time in HH:mm format")]
-        public string EndTimeString { get; set; } = "17:00";
+        public TimeSpan EndTime { get; set; }
 
-        [RegularExpression(@"^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$", ErrorMessage = "Please enter a valid time in HH:mm format")]
-        public string BreakStartTimeString { get; set; } = "12:00";
+        public TimeSpan BreakStartTime { get; set; }
 
-        [RegularExpression(@"^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$", ErrorMessage = "Please enter a valid time in HH:mm format")]
-        public string BreakEndTimeString { get; set; } = "13:00";
+        public TimeSpan BreakEndTime { get; set; }
 
         public string ShiftType { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Status is required")]
-        public string Status { get; set; } = "Available";
+        public string Status { get; set; } = string.Empty;
 
-        public bool IsAvailable { get; set; } = true;
+        public bool IsAvailable { get; set; }
 
         public DateTime CreatedAt { get; set; }
-
-        // Helper properties to convert between TimeSpan and string
-        public TimeSpan StartTime
-        {
-            get => TimeSpan.TryParse(StartTimeString, out var time) ? time : TimeSpan.FromHours(9);
-            set => StartTimeString = value.ToString(@"hh\:mm");
-        }
-
-        public TimeSpan EndTime
-        {
-            get => TimeSpan.TryParse(EndTimeString, out var time) ? time : TimeSpan.FromHours(17);
-            set => EndTimeString = value.ToString(@"hh\:mm");
-        }
-
-        public TimeSpan BreakStartTime
-        {
-            get => TimeSpan.TryParse(BreakStartTimeString, out var time) ? time : TimeSpan.FromHours(12);
-            set => BreakStartTimeString = value.ToString(@"hh\:mm");
-        }
-
-        public TimeSpan BreakEndTime
-        {
-            get => TimeSpan.TryParse(BreakEndTimeString, out var time) ? time : TimeSpan.FromHours(13);
-            set => BreakEndTimeString = value.ToString(@"hh\:mm");
-        }
     }
-}
+} *@
