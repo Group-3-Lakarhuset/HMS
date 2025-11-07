@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
-using YourAppNamespace.Services;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,7 +103,7 @@ app.MapControllers();
 
 
 app.MapAdditionalIdentityEndpoints();
-// Seed roles and users on application startup
+
 using (var scope = app.Services.CreateScope())
 {
     // Seed roles first
@@ -114,5 +114,7 @@ using (var scope = app.Services.CreateScope())
     var userSeedService = scope.ServiceProvider.GetRequiredService<UserSeedService>();
     await userSeedService.SeedUsersAsync();
 }
+
+
 
 app.Run();
