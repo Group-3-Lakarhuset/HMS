@@ -372,5 +372,68 @@ namespace HMS.Services
 
         #endregion
 
+        #region (Profile + Users) Management
+
+        public async Task<List<ApplicationUser>> GetAllUsersAsync()
+        {
+            return await _context.Users
+                .Include(u => u.Patient)
+                .Include(u => u.Staff)
+                .ToListAsync();
+        }
+        public async Task<ApplicationUser?> GetCurrentUserAsync()
+        {
+            var userId = _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+                return null;
+
+            var user = await _userManager.Users
+                .Include(u => u.Patient)
+                .Include(u => u.Staff)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            return user;
+            
+        }
+
+        public async Task<ApplicationUser?> GetUserByIdAsync (string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+
+            return await _userManager.Users
+                .Include (u => u.Patient)
+                .Include(u => u.Staff)
+                .FirstOrDefaultAsync (u => u.Id == id);
+        }
+
+        public async Task<IList<string>> GetUserRolesAsync(ApplicationUser user)
+        {
+            if (user == null) return new List<string>();
+            return await _userManager.GetRolesAsync(user);
+        }
+
+        public async Task<IList<string>> GetCurrentUserRolesAsync()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return new List<string>();
+            return await GetUserRolesAsync(user);
+        }
+
+        public async Task<bool> UpdateUserAsync(ApplicationUser user)
+        {
+            if (user == null) return false;
+            try
+            {
+                var result = await _userManager.UpdateAsync(user);
+                return result.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating user: {ex}");
+                return false;
+            }
+        }
+        #endregion
+
     }
 }
