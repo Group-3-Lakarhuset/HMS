@@ -1,0 +1,955 @@
+﻿@page "/appointments"
+@using HMS.Models
+@using HMS.Services
+@using Microsoft.AspNetCore.Authorization
+@inject AdminService AdminService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize(Policy = "Authenticated")]
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>My Appointments</PageTitle>
+
+<style>
+    .appointment-card {
+        transition: transform 0.2s;
+    }
+
+        .appointment-card:hover {
+            transform: translateY(-2px);
+        }
+
+    .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1050;
+    }
+
+    .time-slot-btn {
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .time-slot-btn:hover {
+            transform: translateY(-2px);
+        }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="bi bi-calendar-heart me-2 text-primary"></i>
+                @if (isAdminOrStaff)
+                {
+                    <text>All Appointments</text>
+                }
+                else
+                {
+                    <text>My Appointments</text>
+                }
+            </h1>
+            <p class="text-muted mb-0">
+                @if (isAdminOrStaff)
+                {
+                    <text>Manage and track all healthcare appointments</text>
+                }
+                else
+                {
+                    <text>Manage and track your healthcare appointments</text>
+                }
+            </p>
+        </div>
+        <AuthorizeView Policy="PatientOnly">
+            <Authorized>
+                <a href="/book-appointment" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>Book New
+                </a>
+            </Authorized>
+        </AuthorizeView>
+    </div>
+
+    <!-- Alerts -->
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+        </div>
+    }
+
+    <!-- Statistics -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-2"
+                         style="width: 48px; height: 48px;">
+                        <i class="bi bi-calendar-check fs-4"></i>
+                    </div>
+                    <h3 class="h4 fw-bold mb-0">@stats.Total</h3>
+                    <p class="text-muted small mb-0">Total</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="bg-success bg-opacity-10 text-success rounded-circle d-inline-flex align-items-center justify-content-center mb-2"
+                         style="width: 48px; height: 48px;">
+                        <i class="bi bi-clock fs-4"></i>
+                    </div>
+                    <h3 class="h4 fw-bold mb-0">@stats.Upcoming</h3>
+                    <p class="text-muted small mb-0">Upcoming</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="bg-info bg-opacity-10 text-info rounded-circle d-inline-flex align-items-center justify-content-center mb-2"
+                         style="width: 48px; height: 48px;">
+                        <i class="bi bi-check-circle fs-4"></i>
+                    </div>
+                    <h3 class="h4 fw-bold mb-0">@stats.Completed</h3>
+                    <p class="text-muted small mb-0">Completed</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="bg-danger bg-opacity-10 text-danger rounded-circle d-inline-flex align-items-center justify-content-center mb-2"
+                         style="width: 48px; height: 48px;">
+                        <i class="bi bi-x-circle fs-4"></i>
+                    </div>
+                    <h3 class="h4 fw-bold mb-0">@stats.Cancelled</h3>
+                    <p class="text-muted small mb-0">Cancelled</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                @if (isAdminOrStaff)
+                {
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold small text-muted">PATIENT</label>
+                        <select class="form-select" @bind="filters.PatientId" @bind:after="ApplyFilters">
+                            <option value="0">All Patients</option>
+                            @foreach (var patient in allPatients)
+                            {
+                                <option value="@patient.Id">
+                                    @patient.User?.FirstName @patient.User?.LastName
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold small text-muted">DOCTOR</label>
+                        <select class="form-select" @bind="filters.DoctorId" @bind:after="ApplyFilters">
+                            <option value="0">All Doctors</option>
+                            @foreach (var staff in allStaff)
+                            {
+                                <option value="@staff.Id">
+                                    Dr. @staff.User?.FirstName @staff.User?.LastName
+                                </option>
+                            }
+                        </select>
+                    </div>
+                }
+                <div class="@(isAdminOrStaff ? "col-md-2" : "col-md-4")">
+                    <label class="form-label fw-semibold small text-muted">STATUS</label>
+                    <select class="form-select" @bind="filters.Status" @bind:after="ApplyFilters">
+                        <option value="">All Statuses</option>
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="@(isAdminOrStaff ? "col-md-2" : "col-md-4")">
+                    <label class="form-label fw-semibold small text-muted">TIME PERIOD</label>
+                    <select class="form-select" @bind="filters.TimePeriod" @bind:after="ApplyFilters">
+                        <option value="">All Time</option>
+                        <option value="upcoming">Upcoming</option>
+                        <option value="past">Past</option>
+                        <option value="today">Today</option>
+                    </select>
+                </div>
+                <div class="@(isAdminOrStaff ? "col-md-2" : "col-md-4")">
+                    <label class="form-label fw-semibold small text-muted">SEARCH</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" placeholder="Search..."
+                               @bind="filters.SearchTerm" @bind:after="ApplyFilters" />
+                        <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <!-- Loading State -->
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3 text-muted">Loading appointments...</p>
+        </div>
+    }
+    else if (!filteredAppointments.Any())
+    {
+        <!-- Empty State -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center py-5">
+                <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                     style="width: 80px; height: 80px;">
+                    <i class="bi bi-calendar-x text-muted display-4"></i>
+                </div>
+                <h4 class="mb-2">No Appointments Found</h4>
+                <p class="text-muted mb-4">
+                    @if (HasActiveFilters())
+                    {
+                        <text>No appointments match your current filters.</text>
+                    }
+                    else if (isAdminOrStaff)
+                    {
+                        <text>There are no appointments in the system yet.</text>
+                    }
+                    else
+                    {
+                        <text>You don't have any appointments yet.</text>
+                    }
+                </p>
+                @if (HasActiveFilters())
+                {
+                    <button class="btn btn-outline-primary me-2" @onclick="ClearFilters">
+                        <i class="bi bi-arrow-counterclockwise me-2"></i>Clear Filters
+                    </button>
+                }
+                <AuthorizeView Policy="PatientOnly">
+                    <Authorized>
+                        <a href="/book-appointment" class="btn btn-primary">
+                            <i class="bi bi-plus-circle me-2"></i>Book Appointment
+                        </a>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Desktop Table View -->
+        <div class="d-none d-lg-block">
+            <div class="card border-0 shadow-sm">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="fw-semibold text-muted small py-3">DOCTOR</th>
+                                <th class="fw-semibold text-muted small py-3">PATIENT</th>
+                                <th class="fw-semibold text-muted small py-3">DATE & TIME</th>
+                                <th class="fw-semibold text-muted small py-3">DURATION</th>
+                                <th class="fw-semibold text-muted small py-3">REASON</th>
+                                <th class="fw-semibold text-muted small py-3">STATUS</th>
+                                <th class="fw-semibold text-muted small py-3 text-end">ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var apt in filteredAppointments.OrderByDescending(a => a.AppointmentDate))
+                            {
+                                <tr>
+                                    <td class="py-3">
+                                        <div class="d-flex align-items-center">
+                                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3"
+                                                 style="width: 40px; height: 40px; font-size: 0.9rem;">
+                                                @GetInitials(apt.Staff?.User?.FirstName, apt.Staff?.User?.LastName)
+                                            </div>
+                                            <div>
+                                                <div class="fw-semibold">Dr. @apt.Staff?.User?.FirstName @apt.Staff?.User?.LastName</div>
+                                                <small class="text-muted">@apt.Staff?.Specialization</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-3">
+                                        <div class="fw-semibold">@apt.Patient?.User?.FirstName @apt.Patient?.User?.LastName</div>
+                                    </td>
+                                    <td class="py-3">
+                                        <div class="fw-medium">@apt.AppointmentDate.ToString("MMM dd, yyyy")</div>
+                                        <small class="text-muted">@apt.AppointmentDate.ToString("hh:mm tt")</small>
+                                    </td>
+                                    <td class="py-3">
+                                        <span class="badge bg-light text-dark">@apt.DurationMinutes min</span>
+                                    </td>
+                                    <td class="py-3">@apt.Reason</td>
+                                    <td class="py-3">
+                                        <span class="badge @GetBadgeClass(apt.Status)">
+                                            @apt.Status
+                                        </span>
+                                    </td>
+                                    <td class="py-3">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewDetails(apt.Id)" title="View Details">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            @if (CanRebook(apt))
+                                            {
+                                                <button class="btn btn-sm btn-outline-warning" @onclick="() => OpenRebook(apt)" title="Rebook">
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                </button>
+                                            }
+                                            @if (CanCancel(apt))
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger" @onclick="() => OpenCancel(apt)" title="Cancel">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Card View -->
+        <div class="d-lg-none">
+            @foreach (var apt in filteredAppointments.OrderByDescending(a => a.AppointmentDate))
+            {
+                <div class="card appointment-card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light border-bottom">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="d-flex align-items-center">
+                                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3"
+                                     style="width: 40px; height: 40px; font-size: 0.9rem;">
+                                    @GetInitials(apt.Staff?.User?.FirstName, apt.Staff?.User?.LastName)
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">Dr. @apt.Staff?.User?.FirstName @apt.Staff?.User?.LastName</div>
+                                    <small class="text-muted">@apt.Staff?.Specialization</small>
+                                </div>
+                            </div>
+                            <span class="badge @GetBadgeClass(apt.Status)">@apt.Status</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <span class="text-muted small">Patient</span>
+                            <span class="fw-semibold">@apt.Patient?.User?.FirstName @apt.Patient?.User?.LastName</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <span class="text-muted small">Date</span>
+                            <span class="fw-medium">@apt.AppointmentDate.ToString("MMM dd, yyyy")</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <span class="text-muted small">Time</span>
+                            <span class="fw-medium">@apt.AppointmentDate.ToString("hh:mm tt")</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <span class="text-muted small">Duration</span>
+                            <span class="badge bg-light text-dark">@apt.DurationMinutes min</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2">
+                            <span class="text-muted small">Reason</span>
+                            <span class="fw-medium text-end">@apt.Reason</span>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white border-top">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary flex-fill" @onclick="() => ViewDetails(apt.Id)">
+                                <i class="bi bi-eye me-1"></i>View
+                            </button>
+                            @if (CanRebook(apt))
+                            {
+                                <button class="btn btn-sm btn-outline-warning flex-fill" @onclick="() => OpenRebook(apt)">
+                                    <i class="bi bi-arrow-repeat me-1"></i>Rebook
+                                </button>
+                            }
+                            @if (CanCancel(apt))
+                            {
+                                <button class="btn btn-sm btn-outline-danger flex-fill" @onclick="() => OpenCancel(apt)">
+                                    <i class="bi bi-x-lg me-1"></i>Cancel
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Modal -->
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal"></div>
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable @(modalType == "view" ? "modal-lg" : "")" @onclick:stopPropagation="true">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title fw-semibold">
+                        @if (modalType == "view")
+                        {
+                            <i class="bi bi-info-circle me-2 text-primary"></i>
+
+                            <text>Appointment Details</text>
+                        }
+                        else if (modalType == "rebook")
+                        {
+                            <i class="bi bi-arrow-repeat me-2 text-warning"></i>
+
+                            <text>Rebook Appointment</text>
+                        }
+                        else if (modalType == "cancel")
+                        {
+                            <i class="bi bi-exclamation-triangle me-2 text-danger"></i>
+
+                            <text>Cancel Appointment</text>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (modalType == "view" && selectedAppointment != null)
+                    {
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="text-uppercase text-muted small fw-semibold mb-1">Patient</label>
+                                <div class="fw-medium">@selectedAppointment.Patient?.User?.FirstName @selectedAppointment.Patient?.User?.LastName</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="text-uppercase text-muted small fw-semibold mb-1">Doctor</label>
+                                <div class="fw-medium">Dr. @selectedAppointment.Staff?.User?.FirstName @selectedAppointment.Staff?.User?.LastName</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="text-uppercase text-muted small fw-semibold mb-1">Date & Time</label>
+                                <div class="fw-medium">@selectedAppointment.AppointmentDate.ToString("MMMM dd, yyyy hh:mm tt")</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="text-uppercase text-muted small fw-semibold mb-1">Duration</label>
+                                <div class="fw-medium">@selectedAppointment.DurationMinutes minutes</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="text-uppercase text-muted small fw-semibold mb-1">Status</label>
+                                <div>
+                                    <span class="badge @GetBadgeClass(selectedAppointment.Status)">
+                                        @selectedAppointment.Status
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="text-uppercase text-muted small fw-semibold mb-1">Price</label>
+                                <div class="fw-medium text-success">@selectedAppointment.Price.ToString("C")</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="text-uppercase text-muted small fw-semibold mb-1">Reason for Visit</label>
+                                <div class="fw-medium">@selectedAppointment.Reason</div>
+                            </div>
+                            @if (!string.IsNullOrEmpty(selectedAppointment.Notes))
+                            {
+                                <div class="col-12">
+                                    <label class="text-uppercase text-muted small fw-semibold mb-1">Notes</label>
+                                    <div class="p-3 bg-light rounded">@selectedAppointment.Notes</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (modalType == "rebook" && selectedAppointment != null)
+                    {
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Current Appointment:</strong> @selectedAppointment.AppointmentDate.ToString("MMMM dd, yyyy hh:mm tt")
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Select New Date</label>
+                            <input type="date" class="form-control" @bind="rebookDate" @bind:after="LoadAvailableSlots"
+                                   min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+
+                        @if (isLoadingSlots)
+                        {
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading slots...</span>
+                                </div>
+                                <p class="mt-2 text-muted small">Loading available time slots...</p>
+                            </div>
+                        }
+                        else if (availableTimeSlots.Any())
+                        {
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">
+                                    Available Time Slots
+                                    <span class="badge bg-primary ms-2">@availableTimeSlots.Count slots</span>
+                                </label>
+                                <div class="row g-2">
+                                    @foreach (var slot in availableTimeSlots)
+                                    {
+                                        var isSelected = selectedTimeSlot?.Id == slot.Id;
+                                        <div class="col-6 col-sm-4 col-md-3">
+                                            <button type="button"
+                                                    class="btn @(isSelected ? "btn-primary" : "btn-outline-primary") w-100 time-slot-btn"
+                                                    @onclick="() => SelectTimeSlot(slot)">
+                                                <i class="bi bi-clock me-1"></i>
+                                                <div class="fw-semibold">@slot.StartTime.ToString(@"hh\:mm")</div>
+                                                <small class="d-block">@slot.EndTime.ToString(@"hh\:mm")</small>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            @if (selectedTimeSlot != null)
+                            {
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle me-2"></i>
+                                    <strong>Selected:</strong> @rebookDate.ToString("MMMM dd, yyyy") at @selectedTimeSlot.StartTime.ToString(@"hh\:mm") - @selectedTimeSlot.EndTime.ToString(@"hh\:mm")
+                                </div>
+                            }
+                        }
+                        else if (rebookDate >= DateTime.Today)
+                        {
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                <strong>No Available Slots</strong><br />
+                                There are no available time slots for Dr. @selectedAppointment.Staff?.User?.FirstName @selectedAppointment.Staff?.User?.LastName on @rebookDate.ToString("MMMM dd, yyyy"). Please select a different date.
+                            </div>
+                        }
+                    }
+                    else if (modalType == "cancel" && selectedAppointment != null)
+                    {
+                        <p class="mb-3">Are you sure you want to cancel this appointment?</p>
+                        <div class="p-3 bg-light rounded mb-3">
+                            <div class="mb-2"><strong>Doctor:</strong> Dr. @selectedAppointment.Staff?.User?.FirstName @selectedAppointment.Staff?.User?.LastName</div>
+                            <div class="mb-2"><strong>Date:</strong> @selectedAppointment.AppointmentDate.ToString("MMMM dd, yyyy")</div>
+                            <div><strong>Time:</strong> @selectedAppointment.AppointmentDate.ToString("hh:mm tt")</div>
+                        </div>
+                        <div class="alert alert-warning mb-0">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            This action cannot be undone.
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
+                    @if (modalType == "rebook")
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="ConfirmRebook"
+                                disabled="@(isProcessing || selectedTimeSlot == null)">
+                            @if (isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            <i class="bi bi-check-circle me-1"></i>
+                            Confirm Rebook
+                        </button>
+                    }
+                    else if (modalType == "cancel")
+                    {
+                        <button type="button" class="btn btn-danger" @onclick="ConfirmCancel" disabled="@isProcessing">
+                            @if (isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            <i class="bi bi-x-circle me-1"></i>
+                            Cancel Appointment
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Appointment> appointments = new();
+    private List<Appointment> filteredAppointments = new();
+    private Appointment? selectedAppointment;
+    private List<AppointmentSlot> availableTimeSlots = new();
+    private AppointmentSlot? selectedTimeSlot;
+    private List<Patient> allPatients = new();
+    private List<Staff> allStaff = new();
+
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private bool isLoadingSlots = false;
+    private bool showModal = false;
+    private string modalType = "";
+    private string successMessage = "";
+    private string errorMessage = "";
+
+    private bool isAdminOrStaff = false;
+    private string currentUserEmail = "";
+    private int? currentPatientId;
+
+    private FilterModel filters = new();
+    private StatsModel stats = new();
+
+    private DateTime rebookDate = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentUser();
+        await LoadAppointments();
+    }
+
+    private async Task LoadCurrentUser()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        currentUserEmail = user.Identity?.Name ?? "";
+
+        isAdminOrStaff = user.IsInRole("Admin") || user.IsInRole("Staff");
+
+        // Get current patient ID if user is a patient
+        if (!isAdminOrStaff)
+        {
+            var allPatientsData = await AdminService.GetAllPatientsAsync();
+            var currentPatient = allPatientsData.FirstOrDefault(p => p.User?.Email == currentUserEmail);
+            currentPatientId = currentPatient?.Id;
+        }
+    }
+
+    private async Task LoadAppointments()
+    {
+        try
+        {
+            isLoading = true;
+
+            // Use AdminService methods
+            if (isAdminOrStaff)
+            {
+                // Admin/Staff: Get all appointments
+                appointments = await AdminService.GetAllAppointmentsAsync();
+
+                // Load patients and staff for filters
+                allPatients = await AdminService.GetAllPatientsAsync();
+                allStaff = await AdminService.GetAllStaffAsync();
+            }
+            else if (currentPatientId.HasValue)
+            {
+                // Patient: Get only their appointments
+                appointments = await AdminService.GetAppointmentsByPatientIdAsync(currentPatientId.Value);
+            }
+            else
+            {
+                appointments = new List<Appointment>();
+            }
+
+            CalculateStats();
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading appointments: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void CalculateStats()
+    {
+        stats.Total = appointments.Count;
+        stats.Upcoming = appointments.Count(a => a.AppointmentDate >= DateTime.Now && a.Status != "Cancelled" && a.Status != "Completed");
+        stats.Completed = appointments.Count(a => a.Status == "Completed");
+        stats.Cancelled = appointments.Count(a => a.Status == "Cancelled");
+    }
+
+    private void ApplyFilters()
+    {
+        var query = appointments.AsQueryable();
+
+        if (isAdminOrStaff)
+        {
+            if (filters.PatientId > 0)
+                query = query.Where(a => a.PatientId == filters.PatientId);
+
+            if (filters.DoctorId > 0)
+                query = query.Where(a => a.StaffId == filters.DoctorId);
+        }
+
+        if (!string.IsNullOrEmpty(filters.Status))
+            query = query.Where(a => a.Status == filters.Status);
+
+        if (!string.IsNullOrEmpty(filters.TimePeriod))
+        {
+            query = filters.TimePeriod switch
+            {
+                "upcoming" => query.Where(a => a.AppointmentDate >= DateTime.Now),
+                "past" => query.Where(a => a.AppointmentDate < DateTime.Now),
+                "today" => query.Where(a => a.AppointmentDate.Date == DateTime.Today),
+                _ => query
+            };
+        }
+
+        if (!string.IsNullOrEmpty(filters.SearchTerm))
+        {
+            var search = filters.SearchTerm.ToLower();
+            query = query.Where(a =>
+                (a.Staff.User.FirstName + " " + a.Staff.User.LastName).ToLower().Contains(search) ||
+                (a.Patient.User.FirstName + " " + a.Patient.User.LastName).ToLower().Contains(search) ||
+                a.Reason.ToLower().Contains(search));
+        }
+
+        filteredAppointments = query.ToList();
+    }
+
+    private void ClearFilters()
+    {
+        filters = new FilterModel();
+        ApplyFilters();
+    }
+
+    private bool HasActiveFilters()
+    {
+        return filters.PatientId > 0 ||
+               filters.DoctorId > 0 ||
+               !string.IsNullOrEmpty(filters.Status) ||
+               !string.IsNullOrEmpty(filters.TimePeriod) ||
+               !string.IsNullOrEmpty(filters.SearchTerm);
+    }
+
+    private async Task ViewDetails(int appointmentId)
+    {
+        try
+        {
+            selectedAppointment = await AdminService.GetAppointmentByIdAsync(appointmentId);
+            modalType = "view";
+            showModal = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading appointment details: {ex.Message}";
+        }
+    }
+
+    private async Task OpenRebook(Appointment apt)
+    {
+        try
+        {
+            // Refresh appointment details
+            selectedAppointment = await AdminService.GetAppointmentByIdAsync(apt.Id);
+            rebookDate = apt.AppointmentDate.Date;
+            selectedTimeSlot = null;
+            availableTimeSlots = new();
+            modalType = "rebook";
+            showModal = true;
+            await LoadAvailableSlots();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error opening rebook: {ex.Message}";
+        }
+    }
+
+    private async Task LoadAvailableSlots()
+    {
+        if (selectedAppointment == null) return;
+
+        try
+        {
+            isLoadingSlots = true;
+            selectedTimeSlot = null;
+
+            var allSlots = await AdminService.GetAllAppointmentSlotsAsync();
+            availableTimeSlots = allSlots
+                .Where(s => s.StaffId == selectedAppointment.StaffId &&
+                           s.Date.Date == rebookDate.Date &&
+                           s.Status == "Available" &&
+                           s.CurrentBookings < s.MaxCapacity)
+                .OrderBy(s => s.StartTime)
+                .ToList();
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading slots: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingSlots = false;
+        }
+    }
+
+    private void SelectTimeSlot(AppointmentSlot slot)
+    {
+        selectedTimeSlot = slot;
+    }
+
+    private void OpenCancel(Appointment apt)
+    {
+        selectedAppointment = apt;
+        modalType = "cancel";
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        selectedAppointment = null;
+        selectedTimeSlot = null;
+        availableTimeSlots = new();
+        modalType = "";
+    }
+
+    private async Task ConfirmRebook()
+    {
+        if (selectedAppointment == null || selectedTimeSlot == null) return;
+
+        try
+        {
+            isProcessing = true;
+
+            var apt = await AdminService.GetAppointmentByIdAsync(selectedAppointment.Id);
+            if (apt != null)
+            {
+                var oldSlotId = apt.AppointmentSlotId;
+
+                apt.AppointmentSlotId = selectedTimeSlot.Id;
+                apt.AppointmentDate = rebookDate.Date.Add(selectedTimeSlot.StartTime);
+                apt.DurationMinutes = (int)(selectedTimeSlot.EndTime - selectedTimeSlot.StartTime).TotalMinutes;
+
+                await AdminService.UpdateAppointmentAsync(apt);
+
+                // Free up the old slot
+                if (oldSlotId.HasValue)
+                {
+                    var oldSlot = await AdminService.GetAppointmentSlotByIdAsync(oldSlotId.Value);
+                    if (oldSlot != null && oldSlot.CurrentBookings > 0)
+                    {
+                        oldSlot.CurrentBookings--;
+                        if (oldSlot.CurrentBookings < oldSlot.MaxCapacity)
+                        {
+                            oldSlot.Status = "Available";
+                        }
+                        await AdminService.UpdateAppointmentSlotAsync(oldSlot);
+                    }
+                }
+
+                // Book the new slot
+                await AdminService.BookAppointmentSlotAsync(selectedTimeSlot.Id);
+
+                successMessage = $"Appointment rescheduled successfully to {rebookDate:MMM dd, yyyy} at {selectedTimeSlot.StartTime:hh\\:mm}!";
+                CloseModal();
+                await LoadAppointments();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task ConfirmCancel()
+    {
+        if (selectedAppointment == null) return;
+
+        try
+        {
+            isProcessing = true;
+
+            var apt = await AdminService.GetAppointmentByIdAsync(selectedAppointment.Id);
+            if (apt != null)
+            {
+                apt.Status = "Cancelled";
+                await AdminService.UpdateAppointmentAsync(apt);
+
+                // Free up the slot
+                if (apt.AppointmentSlotId.HasValue)
+                {
+                    var slot = await AdminService.GetAppointmentSlotByIdAsync(apt.AppointmentSlotId.Value);
+                    if (slot != null && slot.CurrentBookings > 0)
+                    {
+                        slot.CurrentBookings--;
+                        if (slot.CurrentBookings < slot.MaxCapacity)
+                        {
+                            slot.Status = "Available";
+                        }
+                        await AdminService.UpdateAppointmentSlotAsync(slot);
+                    }
+                }
+
+                successMessage = "Appointment cancelled successfully.";
+                CloseModal();
+                await LoadAppointments();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private bool CanRebook(Appointment apt) =>
+        apt.AppointmentDate >= DateTime.Now && apt.Status != "Cancelled" && apt.Status != "Completed";
+
+    private bool CanCancel(Appointment apt) =>
+        apt.Status != "Cancelled" && apt.Status != "Completed";
+
+    private string GetBadgeClass(string status) => status.ToLower() switch
+    {
+        "scheduled" => "bg-primary bg-opacity-10 text-primary",
+        "confirmed" => "bg-success bg-opacity-10 text-success",
+        "completed" => "bg-secondary bg-opacity-10 text-secondary",
+        "cancelled" => "bg-danger bg-opacity-10 text-danger",
+        _ => "bg-light text-dark"
+    };
+
+    private string GetInitials(string? firstName, string? lastName)
+    {
+        var first = !string.IsNullOrEmpty(firstName) ? firstName[0].ToString() : "";
+        var last = !string.IsNullOrEmpty(lastName) ? lastName[0].ToString() : "";
+        return (first + last).ToUpper();
+    }
+
+    private class FilterModel
+    {
+        public int PatientId { get; set; } = 0;
+        public int DoctorId { get; set; } = 0;
+        public string Status { get; set; } = "";
+        public string TimePeriod { get; set; } = "";
+        public string SearchTerm { get; set; } = "";
+    }
+
+    private class StatsModel
+    {
+        public int Total { get; set; }
+        public int Upcoming { get; set; }
+        public int Completed { get; set; }
+        public int Cancelled { get; set; }
+    }
+}

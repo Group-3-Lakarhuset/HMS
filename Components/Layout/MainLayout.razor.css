@@ -6,6 +6,7 @@
 
 main {
     flex: 1;
+    max-width:80%;
 }
 
 .sidebar {
@@ -39,6 +40,10 @@ main {
 @media (max-width: 640.98px) {
     .top-row {
         justify-content: space-between;
+    }
+
+    main {
+        max-width: 100%;
     }
 
     .top-row ::deep a, .top-row ::deep .btn-link {
