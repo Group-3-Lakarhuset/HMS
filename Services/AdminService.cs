@@ -104,6 +104,10 @@ namespace HMS.Services
                     var errors = string.Join(", ", result.Errors.Select(e => e.Description));
                     return (false, $"Failed to create user account: {errors}", null);
                 }
+                else
+                {
+                    await _userManager.AddToRoleAsync(user, "Patient");
+                }
 
                 var patient = new Patient
                 {
@@ -131,29 +135,16 @@ namespace HMS.Services
 
         public async Task<bool> UpdatePatientAsync(Patient patient)
         {
-            if (patient == null) return false;
-
-            var user = await _userManager.GetUserAsync(_httpContextAccessor.HttpContext.User);
-            if (user == null) return false;
-
-            var isPatient = await _userManager.IsInRoleAsync(user, "Patient");
-            var isAdmin = await _userManager.IsInRoleAsync(user, "Admin");
-
-            if (!isAdmin && (!isPatient || user.Id != patient.UserId))
-            {
-                Console.WriteLine("Error updating patient: User with role 'Patient' is not authorized to update patient");
-                return false;
-            }
-
             try
             {
+                await EnsureAuthorizedAsync("AdminOrStaff", "update patient");
                 _context.Patients.Update(patient);
                 await _context.SaveChangesAsync();
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"DB Error: {ex.Message}");
+                Console.WriteLine($"Error updating patient: {ex.Message}");
                 return false;
             }
         }
@@ -249,7 +240,10 @@ namespace HMS.Services
                     var errors = string.Join(", ", result.Errors.Select(e => e.Description));
                     return (false, $"Failed to create user account: {errors}", null);
                 }
-
+                else
+                {
+                    await _userManager.AddToRoleAsync(user, "Staff");
+                }
                 var staff = new Staff
                 {
                     UserId = user.Id,
@@ -277,29 +271,16 @@ namespace HMS.Services
 
         public async Task<bool> UpdateStaffAsync(Staff staff)
         {
-            if (staff == null) return false;
-
-            var user = await _userManager.GetUserAsync(_httpContextAccessor.HttpContext.User);
-            if (user == null) return false;
-
-            var isStaff = await _userManager.IsInRoleAsync(user, "Staff");
-            var isAdmin = await _userManager.IsInRoleAsync(user, "Admin");
-
-            if (!isAdmin && (!isStaff || user.Id != staff.UserId))
-            {
-                Console.WriteLine("Error updating staff: Not authorized");
-                return false;
-            }
-
             try
             {
+                await EnsureAuthorizedAsync("AdminOrStaff", "update staff");
                 _context.Staff.Update(staff);
                 await _context.SaveChangesAsync();
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"DB Error: {ex.Message}");
+                Console.WriteLine($"Error updating staff: {ex.Message}");
                 return false;
             }
         }
