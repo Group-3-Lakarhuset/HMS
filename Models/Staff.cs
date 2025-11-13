@@ -38,23 +38,10 @@ namespace HMS.Models
         [Required]
         public DateTime HiredDate { get; set; } = DateTime.UtcNow;
 
-        // Appointment booking related fields
-        [Column(TypeName = "decimal(18,2)")]
-        [Range(0, double.MaxValue)]
-        public decimal ConsultationFee { get; set; } = 50.00m;
-
-        public bool IsAcceptingPatients { get; set; } = true;
-
-        [Range(1, 100)]
-        public int MaxDailyAppointments { get; set; } = 20;
-
-        // Navigation properties
-        public ApplicationUser User { get; set; } = null!; // One-to-One with AspNetUsers
-        public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>(); // One-to-Many
-        public ICollection<Schedule> Schedules { get; set; } = new List<Schedule>(); // One-to-Many
-        public ICollection<TimeReport> TimeReports { get; set; } = new List<TimeReport>(); // One-to-Many
-        public ICollection<AppointmentSlot> AppointmentSlots { get; set; } = new List<AppointmentSlot>(); // One-to-Many
-        public ICollection<AppointmentBlock> AppointmentBlocks { get; set; } = new List<AppointmentBlock>(); // One-to-Many
-        public ICollection<AppointmentSlotConfiguration> SlotConfigurations { get; set; } = new List<AppointmentSlotConfiguration>(); // One-to-Many
+        public ApplicationUser User { get; set; }
+        public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>(); 
+        public ICollection<Schedule> Schedules { get; set; } = new List<Schedule>(); 
+        public ICollection<TimeReport> TimeReports { get; set; } = new List<TimeReport>();
+/*        public ICollection<Leave> Leaves { get; set; } = new List<Leave>();*/
     }
 }

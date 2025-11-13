@@ -1,7 +1,7 @@
 using HMS.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-
+using System.Reflection.Emit;
 
 namespace HMS.Data
 {
@@ -11,12 +11,13 @@ namespace HMS.Data
 
         public DbSet<Patient> Patients { get; set; }
         public DbSet<Staff> Staff { get; set; }
-        public DbSet<Appointment> Appointments { get; set; }
-        public DbSet<Invoice> Invoices { get; set; }
-        public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<Schedule> Schedules { get; set; }
         public DbSet<TimeReport> TimeReports { get; set; }
+        public DbSet<Invoice> Invoices { get; set; }
+        public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
+        public DbSet<Appointment> Appointments { get; set; }
+        //public DbSet<Leave> Leaves { get; set; }
 
         // New appointment booking system models
         public DbSet<AppointmentSlot> AppointmentSlots { get; set; }
@@ -112,81 +113,42 @@ namespace HMS.Data
 
             builder.Entity<TimeReport>(entity =>
             {
-                // One Staff -> many TimeReports (this can stay one-to-many)
+                
                 entity.HasOne(e => e.Staff)
                     .WithMany(c => c.TimeReports)
                     .HasForeignKey(e => e.StaffId)
                     .OnDelete(DeleteBehavior.Restrict);
 
-                // One Schedule -> one TimeReport
+                
                 entity.HasOne(e => e.Schedule)
                     .WithOne(c => c.TimeReport)
                     .HasForeignKey<TimeReport>(e => e.ScheduleId)
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired(false); // prevent cascade loop
+                    .OnDelete(DeleteBehavior.Restrict); 
             });
 
             builder.Entity<Invoice>(entity =>
             {
-
-                // One Patient -> many Invoices
+               
                 entity.HasOne(e => e.Patient)
                     .WithMany(c => c.Invoices)
                     .HasForeignKey(e => e.PatientId)
-                    .OnDelete(DeleteBehavior.Restrict); // prevent multiple cascade paths
+                    .OnDelete(DeleteBehavior.Restrict); 
 
-                // One Appointment -> one Invoice
+               
                 entity.HasOne(e => e.Appointment)
                     .WithOne(c => c.Invoice)
                     .HasForeignKey<Invoice>(e => e.AppointmentId)
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired(false); // safer, avoids loops
+                    .OnDelete(DeleteBehavior.Restrict); 
             });
-
-            // APPOINTMENT SLOT CONFIGURATION
-            builder.Entity<AppointmentSlotConfiguration>(entity =>
+            // LEAVES
+         
+/*            builder.Entity<Leave>(entity =>
             {
-                entity.Property(e => e.UpdatedAt).IsRequired(false);
-                entity.Property(e => e.SlotDurationMinutes).IsRequired();
-                entity.Property(e => e.BufferTimeMinutes).IsRequired();
-                entity.Property(e => e.MaxPatientsPerSlot).IsRequired();
-                entity.Property(e => e.AdvanceBookingDays).IsRequired();
-
                 entity.HasOne(e => e.Staff)
-                    .WithMany(s => s.SlotConfigurations)
-                    .HasForeignKey(e => e.StaffId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
-
-            // APPOINTMENT SLOT
-            builder.Entity<AppointmentSlot>(entity =>
-            {
-                entity.Property(e => e.Notes).IsRequired(false);
-                entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
-
-                entity.HasOne(e => e.Schedule)
-                    .WithMany(s => s.AppointmentSlots)
-                    .HasForeignKey(e => e.ScheduleId)
-                    .OnDelete(DeleteBehavior.Cascade);
-
-                entity.HasOne(e => e.Staff)
-                    .WithMany(s => s.AppointmentSlots)
-                    .HasForeignKey(e => e.StaffId)
-                    .OnDelete(DeleteBehavior.Restrict);
-            });
-
-            // APPOINTMENT BLOCK
-            builder.Entity<AppointmentBlock>(entity =>
-            {
-                entity.Property(e => e.Notes).IsRequired(false);
-                entity.Property(e => e.CreatedBy).IsRequired(false);
-                entity.Property(e => e.Reason).HasMaxLength(100).IsRequired();
-
-                entity.HasOne(e => e.Staff)
-                    .WithMany(s => s.AppointmentBlocks)
-                    .HasForeignKey(e => e.StaffId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+                .WithMany(c => c.Leaves)
+                .HasForeignKey(entity => entity.StaffId)
+                .OnDelete(DeleteBehavior.Cascade);
+            });*/
         }
     }
 }
