@@ -39,7 +39,7 @@
                 <i class="bi bi-heart-pulse-fill me-2"></i>
                 Total Patients: <span class="badge bg-light text-primary">@patients.Count</span>
             </h5>
-            <AuthorizeView Policy="AdminOnly">
+            <AuthorizeView Policy="AdminOrStaff">
                 <button class="btn btn-light btn-sm" @onclick='() => Navigation.NavigateTo("/admin/patient/create")'>
                     <i class="bi bi-plus-circle me-1"></i> Add Patient
                 </button>
@@ -98,7 +98,7 @@
                                                     title="View Details">
                                                 <i class="bi bi-eye"></i>
                                             </button>
-                                            <AuthorizeView Policy="AdminOnly">
+                                            <AuthorizeView Policy="AdminOrStaff">
                                                 <button class="btn btn-outline-warning"
                                                         @onclick="() => EditPatient(patient.Id)"
                                                         title="Edit">

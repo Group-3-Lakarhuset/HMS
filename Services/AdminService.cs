@@ -86,7 +86,7 @@ namespace HMS.Services
         {
             try
             {
-                await EnsureAuthorizedAsync("AdminOnly", "create patient");
+                await EnsureAuthorizedAsync("AdminOrStaff", "create patient");
                 var user = new ApplicationUser
                 {
                     UserName = email,
@@ -411,6 +411,7 @@ namespace HMS.Services
             return await _context.Appointments
                 .Include(a => a.Staff)
                     .ThenInclude(s => s.User)
+                .Include(a => a.AppointmentSlot)
                 .Include(a => a.Schedule)
                 .Where(a => a.PatientId == patientId)
                 .OrderByDescending(a => a.AppointmentDate)
@@ -945,6 +946,61 @@ namespace HMS.Services
         }
 
         #endregion
+
+        #endregion
+
+        #region Statistics
+
+        public async Task<int> GetTotalPatientsCountAsync()
+        {
+            return await _context.Patients.CountAsync();
+        }
+
+        public async Task<int> GetTotalStaffCountAsync()
+        {
+            return await _context.Staff.CountAsync();
+        }
+
+        public async Task<int> GetTotalSchedulesCountAsync()
+        {
+            return await _context.Schedules.CountAsync();
+        }
+
+        public async Task<decimal> GetTotalTransactionAmountAsync()
+        {
+            return await _context.Transactions
+                .Where(t => t.Status == "Completed" || t.Status == "Success")
+                .SumAsync(t => t.Amount);
+        }
+
+        public async Task<int> GetTotalAppointmentsCountAsync()
+        {
+            return await _context.Appointments.CountAsync();
+        }
+
+        public async Task<int> GetTotalInvoicesCountAsync()
+        {
+            return await _context.Invoices.CountAsync();
+        }
+
+        public async Task<int> GetTotalTimeReportsCountAsync()
+        {
+            return await _context.TimeReports.CountAsync();
+        }
+
+        public async Task<int> GetPendingInvoicesCountAsync()
+        {
+            return await _context.Invoices
+                .Where(i => i.Status == "Pending")
+                .CountAsync();
+        }
+
+        public async Task<decimal> GetPendingInvoicesAmountAsync()
+        {
+            return await _context.Invoices
+                .Where(i => i.Status == "Pending")
+                .SumAsync(i => i.TotalAmount);
+        }
 
         #endregion
     }
