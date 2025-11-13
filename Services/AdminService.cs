@@ -379,9 +379,141 @@ namespace HMS.Services
 
         #endregion
 
-        #region Profile Management
+        #region (Profile + Users) Management
 
+        public async Task<List<ApplicationUser>> GetAllUsersAsync()
+        {
+            return await _context.Users
+                .Include(u => u.Patient)
+                .Include(u => u.Staff)
+                .ToListAsync();
+        }
+        public async Task<ApplicationUser?> GetCurrentUserAsync()
+        {
+            var userId = _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return null;
+
+            return await _context.Users
+                .Include(u => u.Patient)
+                .Include(u => u.Staff)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<ApplicationUser?> GetUserByIdAsync (string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+
+            return await _userManager.Users
+                .Include (u => u.Patient)
+                .Include(u => u.Staff)
+                .FirstOrDefaultAsync (u => u.Id == id);
+        }
+
+        public async Task<IList<string>> GetUserRolesAsync(ApplicationUser user)
+        {
+            if (user == null) return new List<string>();
+            return await _userManager.GetRolesAsync(user);
+        }
+
+        public async Task<IList<string>> GetCurrentUserRolesAsync()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return new List<string>();
+            return await GetUserRolesAsync(user);
+        }
+
+        public async Task<bool> UpdateUserAsync(ApplicationUser user)
+        {
+            if (user == null) return false;
+
+            try
+            {
+                //Update Identity fields
+                var identityResult = await _userManager.UpdateAsync(user);
+                if (!identityResult.Succeeded)
+                {
+                    Console.WriteLine("Identity update failed: " + string.Join(", ", identityResult.Errors.Select(e => e.Description)));
+                    return false;
+                }
+
+                //Save custom fields in ApplicationUser
+                _context.Users.Update(user);
+                var rowsAffected = await _context.SaveChangesAsync();
+
+                return rowsAffected > 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating user: {ex.Message}");
+                return false;
+            }
+        }
         #endregion
 
+        #region Invoice Management
+
+        public async Task<List<Appointment>> GetAllAppointmentsAsync()
+        {
+            return await _context.Appointments
+                .Include(a => a.Patient)
+                    .ThenInclude(p => p.User)
+                .ToListAsync();
+        }
+
+        public async Task<List<Invoice>> GetAllInvoicesAsync()
+        {
+            return await _context.Invoices
+                .Include(i => i.Appointment)
+                    .ThenInclude(a => a.Patient)
+                .Include(i => i.Appointment)
+                    .ThenInclude(a => a.Staff)
+                .ToListAsync();
+        }
+
+        public async Task<Invoice?> GetInvoiceByIdAsync(int id)
+        {
+            return await _context.Invoices
+                .Include(i => i.Appointment)
+                    .ThenInclude(a => a.Patient)
+                .Include(i => i.Appointment)
+                    .ThenInclude(a => a.Staff)
+                .FirstOrDefaultAsync(i => i.Id == id);
+        }
+
+        public async Task<Invoice> CreateInvoiceAsync(Invoice invoice)
+        {
+            var appointment = await _context.Appointments
+                .FirstOrDefaultAsync(a => a.Id == invoice.AppointmentId);
+
+            if (appointment == null)
+                throw new Exception("Appointment not found for this invoice.");
+
+            _context.Invoices.Add(invoice);
+            await _context.SaveChangesAsync();
+
+            appointment.Invoice = invoice;
+            _context.Appointments.Update(appointment);
+            await _context.SaveChangesAsync();
+
+            return invoice;
+        }
+
+        public async Task UpdateInvoiceAsync(Invoice invoice)
+        {
+            _context.Invoices.Update(invoice);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task DeleteInvoiceAsync(int id)
+        {
+            var invoice = await _context.Invoices.FindAsync(id);
+            if (invoice != null)
+            {
+                _context.Invoices.Remove(invoice);
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        #endregion
     }
 }
