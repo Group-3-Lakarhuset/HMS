@@ -1,4 +1,4 @@
-using HMS.Models;
+﻿using HMS.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection.Emit;
@@ -99,6 +99,38 @@ namespace HMS.Data
                     .IsRequired(false);
             });
 
+            builder.Entity<AppointmentSlot>(entity =>
+            {
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Notes).IsRequired(false);
+
+                // Schedule relationship - Keep CASCADE (slots should be deleted with schedule)
+                entity.HasOne(e => e.Schedule)
+                    .WithMany(s => s.AppointmentSlots)
+                    .HasForeignKey(e => e.ScheduleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Staff)
+                    .WithMany()  // No navigation property needed on Staff side
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Restrict); 
+            });
+
+            builder.Entity<AppointmentSlotConfiguration>(entity =>
+            {
+                entity.HasOne(e => e.Staff)
+                    .WithMany()
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Restrict);  
+            });
+
+            builder.Entity<AppointmentBlock>(entity =>
+            {
+                entity.HasOne(e => e.Staff)
+                    .WithMany()
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Restrict); 
+            });
             // SCHEDULE
             builder.Entity<Schedule>(entity =>
             {
