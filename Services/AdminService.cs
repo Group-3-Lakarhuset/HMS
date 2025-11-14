@@ -71,6 +71,34 @@ namespace HMS.Services
                 .Include(tr => tr.Schedule)
                 .FirstOrDefaultAsync(tr => tr.Id == id);
         }
+        public async Task<(bool Success, string Message)> DeleteTimeReportAsync(int id)
+        {
+            try
+            {
+                // Check authorization - only Admin can delete time reports
+                await EnsureAuthorizedAsync("AdminOnly", "delete time report");
+
+                // Find the time report
+                var timeReport = await _context.TimeReports.FindAsync(id);
+
+                if (timeReport == null)
+                    return (false, "Time report not found");
+
+                // Remove the time report
+                _context.TimeReports.Remove(timeReport);
+                await _context.SaveChangesAsync();
+
+                return (true, "Time report deleted successfully");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return (false, $"Access Denied: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Error deleting time report: {ex.Message}");
+            }
+        }
 
 
         #region Patient Management
