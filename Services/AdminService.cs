@@ -131,6 +131,20 @@ namespace HMS.Services
                     var duration = clockOut.Value - clockIn;
                     hoursWorked = (decimal)duration.TotalHours;
                 }
+                //Creating timereport
+                var timeReport = new TimeReport
+                {
+                    StaffId = staffId,
+                    ScheduleId = scheduleId,
+                    ClockIn = clockIn,
+                    ClockOut = clockOut,
+                    HoursWorked = hoursWorked,
+                    ActivityType = activityType,
+                    Notes = notes,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.TimeReports.Add(timeReport);
+                await _context.SaveChangesAsync();
 
 
             }
