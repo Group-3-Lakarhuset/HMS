@@ -165,7 +165,8 @@ namespace HMS.Services
                 }
 
                 return (true, "Time report created successfully", timeReport);
-                catch (UnauthorizedAccessException ex)
+            }
+            catch (UnauthorizedAccessException ex)
             {
                 return (false, $"Access Denied: {ex.Message}", null);
             }
@@ -234,16 +235,8 @@ namespace HMS.Services
                 return (false, $"Error updating time report: {ex.Message}");
             }
         }
-    
 
-
-        
-
-
-
-
-
-        }
+             
 
 
 
