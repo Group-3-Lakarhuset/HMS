@@ -658,8 +658,22 @@ namespace HMS.Services
         {
             await EnsureAuthorizedAsync("AdminOrStaff", "update slot configurations");
 
-            config.UpdatedAt = DateTime.UtcNow;
-            _context.AppointmentSlotConfigurations.Update(config);
+            // ✅ Find the existing entity in the database
+            var existingConfig = await _context.AppointmentSlotConfigurations
+                .FirstOrDefaultAsync(c => c.Id == config.Id);
+
+            if (existingConfig == null)
+                return false;
+
+            // ✅ Update only the properties that can change
+            existingConfig.SlotDurationMinutes = config.SlotDurationMinutes;
+            existingConfig.BufferTimeMinutes = config.BufferTimeMinutes;
+            existingConfig.MaxPatientsPerSlot = config.MaxPatientsPerSlot;
+            existingConfig.AdvanceBookingDays = config.AdvanceBookingDays;
+            existingConfig.IsActive = config.IsActive;
+            existingConfig.UpdatedAt = DateTime.UtcNow;
+
+            // ✅ EF Core is already tracking existingConfig, so just save
             return await _context.SaveChangesAsync() > 0;
         }
 
