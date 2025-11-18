@@ -1,219 +1,497 @@
 ﻿@page "/invoice/create"
 @using HMS.Models
 @using HMS.Services
+@using Microsoft.AspNetCore.Authorization
 @inject AdminService AdminService
 @inject NavigationManager Navigation
+@attribute [Authorize(Policy = "AdminOrStaff")]
 @rendermode InteractiveServer
 
-<h3>Create Invoice</h3>
+<PageTitle>Create Invoice - HMS</PageTitle>
 
-<main class="col-12 col-md-9 col-lg-10 py-4">
-    <section class="content-area">
-        <EditForm Model="@invoice" OnValidSubmit="HandleCreateInvoice">
-            <DataAnnotationsValidator />
-            <ValidationSummary />
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>📄 Create Invoice</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/dashboard">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="/invoice">Invoices</a></li>
+                    <li class="breadcrumb-item active">Create</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
 
-            <div class="card p-4 shadow-sm rounded">
-                <div class="row g-3">
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
 
-                    <!-- PATIENT -->
-                    <div class="col-md-6">
-                        <label class="form-label">Patient</label>
-                        <select class="form-select" @onchange="OnPatientChanged">
-                            <option value="">Select Patient</option>
-                            @foreach (var p in patients)
-                            {
-                                <option value="@p.Id">@p.User?.FirstName @p.User?.LastName</option>
-                            }
-                        </select>
-                    </div>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <!-- Patient & Appointment Selection -->
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Patient *</label>
+                    <select class="form-select" @onchange="OnPatientChanged">
+                        <option value="">Select Patient</option>
+                        @foreach (var patient in patients)
+                        {
+                            <option value="@patient.Id">
+                                @patient.User?.FirstName @patient.User?.LastName - @patient.Contact
+                            </option>
+                        }
+                    </select>
+                </div>
 
-                    <!-- APPOINTMENT -->
-                    <div class="col-md-6">
-                        <label class="form-label">Appointment</label>
-                        <select class="form-select" @bind="invoice.AppointmentId">
-                            <option value="">Select Appointment</option>
-                            @foreach (var appt in filteredAppointments)
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Appointment (Optional)</label>
+                    <select class="form-select" @bind="selectedAppointmentId" @bind:after="OnAppointmentSelected">
+                        <option value="0">None - General Billing</option>
+                        @if (availableAppointments.Any())
+                        {
+                            @foreach (var appt in availableAppointments)
                             {
                                 <option value="@appt.Id">
-                                    @appt.AppointmentDate.ToShortDateString() - @appt.Reason
+                                    @appt.AppointmentDate.ToString("MMM dd, yyyy") - @appt.Reason
+                                    @if (appt.Staff?.User != null)
+                                    {
+                                        <text> (Dr. @appt.Staff.User.LastName)</text>
+                                    }
                                 </option>
                             }
-                        </select>
-                    </div>
+                        }
+                        else if (newInvoice.PatientId > 0)
+                        {
+                            <option disabled>No appointments available without invoices</option>
+                        }
+                    </select>
+                    <small class="text-muted">
+                        @if (newInvoice.PatientId > 0)
+                        {
+                            <text>Showing only appointments without existing invoices</text>
+                        }
+                        else
+                        {
+                            <text>Select a patient first to see available appointments</text>
+                        }
+                    </small>
+                </div>
+            </div>
 
-                    <!-- INVOICE ITEMS -->
-                    <div class="col-12 mt-4">
-                        <h5>Invoice Items</h5>
+            @if (hasInvoicedAppointments && newInvoice.PatientId > 0)
+            {
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Note:</strong> @invoicedAppointmentsCount appointment(s) already have invoices and are not shown in the list.
+                </div>
+            }
+
+            <hr class="my-4" />
+
+            <!-- Invoice Items Section -->
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-check me-2"></i>Invoice Items
+                    </h5>
+                    <button class="btn btn-success btn-sm" @onclick="AddInvoiceItem">
+                        <i class="bi bi-plus-circle me-1"></i>Add Item
+                    </button>
+                </div>
+
+                @if (!invoiceItems.Any())
+                {
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Please add at least one item to the invoice
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
                         <table class="table table-bordered">
-                            <thead>
+                            <thead class="table-light">
                                 <tr>
-                                    <th>Description</th>
-                                    <th style="width:100px;">Qty</th>
-                                    <th style="width:150px;">Unit Price</th>
-                                    <th style="width:150px;">Total</th>
-                                    <th style="width:60px;"></th>
+                                    <th style="width: 40%;">Description</th>
+                                    <th style="width: 15%;">Quantity</th>
+                                    <th style="width: 20%;">Unit Price</th>
+                                    <th style="width: 20%;">Total</th>
+                                    <th style="width: 5%;"></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var item in invoice.InvoiceItems)
+                                @for (int i = 0; i < invoiceItems.Count; i++)
                                 {
+                                    var index = i;
+                                    var item = invoiceItems[index];
                                     <tr>
                                         <td>
-                                            <input class="form-control"
+                                            <input type="text" class="form-control"
                                                    @bind="item.Description"
-                                                   @oninput="RecalculateTotals" />
+                                                   placeholder="Service description" />
                                         </td>
                                         <td>
-                                            <input type="number"
-                                                   class="form-control"
+                                            <input type="number" class="form-control"
                                                    @bind="item.Quantity"
-                                                   @oninput="RecalculateTotals" />
+                                                   @bind:after="() => CalculateItemTotal(index)"
+                                                   min="1" step="1" />
                                         </td>
                                         <td>
-                                            <input type="number" step="0.01"
-                                                   class="form-control"
-                                                   @bind="item.UnitPrice"
-                                                   @oninput="RecalculateTotals" />
+                                            <div class="input-group">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" class="form-control"
+                                                       @bind="item.UnitPrice"
+                                                       @bind:after="() => CalculateItemTotal(index)"
+                                                       min="0" step="0.01" />
+                                            </div>
                                         </td>
                                         <td>
-                                            @item.TotalPrice.ToString("0.00")
+                                            <div class="input-group">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" class="form-control bg-light"
+                                                       value="@item.TotalPrice.ToString("F2")"
+                                                       readonly />
+                                            </div>
                                         </td>
                                         <td>
-                                            <button type="button"
-                                                    class="btn btn-danger btn-sm"
-                                                    @onclick="() => RemoveItem(item)">
-                                                X
+                                            <button class="btn btn-danger btn-sm"
+                                                    @onclick="() => RemoveInvoiceItem(index)"
+                                                    title="Remove">
+                                                <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
                                     </tr>
                                 }
                             </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <td colspan="3" class="text-end"><strong>Subtotal:</strong></td>
+                                    <td colspan="2"><strong>@newInvoice.SubTotal.ToString("C")</strong></td>
+                                </tr>
+                            </tfoot>
                         </table>
-
-                        <button type="button"
-                                class="btn btn-primary"
-                                @onclick="AddItem">
-                            + Add Item
-                        </button>
                     </div>
+                }
+            </div>
 
-                    <!-- TOTALS -->
-                    <div class="col-md-4 mt-3">
-                        <label class="form-label">Subtotal</label>
-                        <input type="number" class="form-control" value="@invoice.SubTotal" readonly />
+            <hr class="my-4" />
+
+            <!-- Tax and Total Calculation -->
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Status *</label>
+                            <select class="form-select" @bind="newInvoice.Status">
+                                <option value="Unpaid">Unpaid</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Paid">Paid</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Due Date *</label>
+                            <input type="date" class="form-control" @bind="dueDate" />
+                        </div>
                     </div>
+                </div>
 
-                    <div class="col-md-4 mt-3">
-                        <label class="form-label">Tax (%)</label>
-                        <input type="number" class="form-control" @bind="taxPercent" @oninput="RecalculateTotals" />
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Subtotal:</span>
+                                <strong>@newInvoice.SubTotal.ToString("C")</strong>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Tax (%)</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" class="form-control"
+                                           @bind="taxPercent"
+                                           @bind:event="oninput"
+                                           @bind:after="CalculateTotals"
+                                           step="0.01" min="0" max="100" />
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Tax Amount:</span>
+                                <strong>@newInvoice.TaxAmount.ToString("C")</strong>
+                            </div>
+                            <hr />
+                            <div class="d-flex justify-content-between">
+                                <strong class="text-primary">Total:</strong>
+                                <strong class="text-primary fs-5">@newInvoice.TotalAmount.ToString("C")</strong>
+                            </div>
+                        </div>
                     </div>
-
-                    <div class="col-md-4 mt-3">
-                        <label class="form-label">Total</label>
-                        <input type="number" class="form-control" value="@invoice.TotalAmount" readonly />
-                    </div>
-
-                    <!-- STATUS + DUE DATE -->
-                    <div class="col-md-6 mt-3">
-                        <label class="form-label">Status</label>
-                        <select class="form-select" @bind="invoice.Status">
-                            <option value="Pending">Pending</option>
-                            <option value="Unpaid">Unpaid</option>
-                            <option value="Paid">Paid</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6 mt-3">
-                        <label class="form-label">Due Date</label>
-                        <input type="date" class="form-control" @bind="invoice.DueDate" />
-                    </div>
-
-                    <!-- BUTTONS -->
-                    <div class="col-12 text-end mt-4">
-                        <button type="submit" class="btn btn-success">Create Invoice</button>
-                        <button type="button" class="btn btn-secondary ms-2"
-                                @onclick="@(() => Navigation.NavigateTo("/invoice"))">
-                            Cancel
-                        </button>
-                    </div>
-
                 </div>
             </div>
-        </EditForm>
-    </section>
-</main>
+
+            <!-- Summary Box -->
+            @if (newInvoice.PatientId > 0 && invoiceItems.Any())
+            {
+                <div class="alert alert-info mt-3">
+                    <h6 class="mb-2"><i class="bi bi-info-circle me-2"></i>Invoice Summary</h6>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <small class="text-muted d-block">Patient:</small>
+                            <strong>
+                                @patients.FirstOrDefault(p => p.Id == newInvoice.PatientId)?.User?.FirstName
+                                @patients.FirstOrDefault(p => p.Id == newInvoice.PatientId)?.User?.LastName
+                            </strong>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted d-block">Items:</small>
+                            <strong>@invoiceItems.Count service(s)</strong>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted d-block">Total Amount:</small>
+                            <strong class="text-primary fs-5">@newInvoice.TotalAmount.ToString("C")</strong>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="text-end mt-4">
+                <button type="button" class="btn btn-secondary me-2"
+                        @onclick='() => Navigation.NavigateTo("/invoice")'>
+                    <i class="bi bi-x-circle me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary"
+                        @onclick="CreateInvoiceAsync"
+                        disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    <i class="bi bi-check-circle me-2"></i>Create Invoice
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @code {
-    private Invoice invoice = new();
+    private Invoice newInvoice = new();
+    private List<InvoiceItem> invoiceItems = new();
     private List<Patient> patients = new();
-    private List<Appointment> appointments = new();
-    private List<Appointment> filteredAppointments = new();
+    private List<Appointment> allAppointments = new();
+    private List<Appointment> availableAppointments = new();
+    private List<Invoice> existingInvoices = new();
     private decimal taxPercent = 10;
+    private DateTime dueDate = DateTime.Today.AddDays(30);
+    private bool isSaving = false;
+    private string? errorMessage;
+    private int selectedAppointmentId = 0;
+    private bool hasInvoicedAppointments = false;
+    private int invoicedAppointmentsCount = 0;
 
     protected override async Task OnInitializedAsync()
     {
-        patients = await AdminService.GetAllPatientsAsync();
-        appointments = await AdminService.GetAllAppointmentsAsync();
+        try
+        {
+            patients = await AdminService.GetAllPatientsAsync();
+            allAppointments = await AdminService.GetAllAppointmentsAsync();
+            existingInvoices = await AdminService.GetAllInvoicesAsync();
+
+            // Set default values
+            newInvoice.DueDate = dueDate;
+            newInvoice.Status = "Unpaid";
+
+            // Add one default item
+            AddInvoiceItem();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading data: {ex.Message}";
+        }
     }
 
     private void OnPatientChanged(ChangeEventArgs e)
     {
-        if (int.TryParse(e.Value?.ToString(), out int patientId))
+        if (int.TryParse(e.Value?.ToString(), out int patientId) && patientId > 0)
         {
-            invoice.PatientId = patientId;
+            newInvoice.PatientId = patientId;
+            selectedAppointmentId = 0;
+            newInvoice.AppointmentId = null;
 
-            filteredAppointments = appointments
+            // Get all appointments for this patient
+            var patientAppointments = allAppointments
                 .Where(a => a.PatientId == patientId)
+                .OrderByDescending(a => a.AppointmentDate)
                 .ToList();
+
+            // Get appointment IDs that already have invoices
+            var appointmentIdsWithInvoices = existingInvoices
+                .Where(i => i.AppointmentId.HasValue)
+                .Select(i => i.AppointmentId.Value)
+                .ToHashSet();
+
+            // Filter out appointments that already have invoices
+            availableAppointments = patientAppointments
+                .Where(a => !appointmentIdsWithInvoices.Contains(a.Id))
+                .ToList();
+
+            // Track how many appointments have invoices
+            invoicedAppointmentsCount = patientAppointments.Count - availableAppointments.Count;
+            hasInvoicedAppointments = invoicedAppointmentsCount > 0;
         }
         else
         {
-            filteredAppointments.Clear();
+            newInvoice.PatientId = 0;
+            selectedAppointmentId = 0;
+            newInvoice.AppointmentId = null;
+            availableAppointments.Clear();
+            hasInvoicedAppointments = false;
+            invoicedAppointmentsCount = 0;
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnAppointmentSelected()
+    {
+        if (selectedAppointmentId > 0)
+        {
+            newInvoice.AppointmentId = selectedAppointmentId;
+
+            // Auto-populate first item if empty
+            if (invoiceItems.Count == 1 && string.IsNullOrEmpty(invoiceItems[0].Description))
+            {
+                var appointment = availableAppointments.FirstOrDefault(a => a.Id == selectedAppointmentId);
+                if (appointment != null)
+                {
+                    invoiceItems[0].Description = appointment.Reason ?? "Medical Consultation";
+                    invoiceItems[0].Quantity = 1;
+                    invoiceItems[0].UnitPrice = 500; // Default price
+                    CalculateItemTotal(0);
+                }
+            }
+        }
+        else
+        {
+            newInvoice.AppointmentId = null;
         }
     }
 
-    private void AddItem()
+    private void AddInvoiceItem()
     {
-        invoice.InvoiceItems.Add(new InvoiceItem
+        invoiceItems.Add(new InvoiceItem
         {
+            Description = "",
             Quantity = 1,
             UnitPrice = 0,
             TotalPrice = 0
         });
     }
 
-    private void RemoveItem(InvoiceItem item)
+    private void RemoveInvoiceItem(int index)
     {
-        invoice.InvoiceItems.Remove(item);
-        RecalculateTotals();
-    }
-
-    private void RecalculateTotals(ChangeEventArgs? e = null)
-    {
-        foreach (var item in invoice.InvoiceItems)
+        if (invoiceItems.Count > 1)
         {
-            item.TotalPrice = item.UnitPrice * item.Quantity;
+            invoiceItems.RemoveAt(index);
+            CalculateTotals();
         }
-
-        invoice.SubTotal = invoice.InvoiceItems.Sum(i => i.TotalPrice);
-        invoice.TaxAmount = invoice.SubTotal * (taxPercent / 100);
-        invoice.TotalAmount = invoice.SubTotal + invoice.TaxAmount;
     }
 
-    private async Task HandleCreateInvoice()
+    private void CalculateItemTotal(int index)
     {
-        invoice.InvoiceNumber = $"INV-{DateTime.Now.Ticks}";
-        invoice.CreatedAt = DateTime.Now;
+        if (index >= 0 && index < invoiceItems.Count)
+        {
+            var item = invoiceItems[index];
+            item.TotalPrice = item.Quantity * item.UnitPrice;
+            CalculateTotals();
+        }
+    }
 
-        // Calculate final totals one last time
-        RecalculateTotals();
+    private void CalculateTotals()
+    {
+        // Calculate subtotal from all items
+        newInvoice.SubTotal = invoiceItems.Sum(i => i.TotalPrice);
 
-        var created = await AdminService.CreateInvoiceAsync(invoice);
+        // Calculate tax
+        newInvoice.TaxAmount = newInvoice.SubTotal * (taxPercent / 100);
 
-        if (created != null)
-            Navigation.NavigateTo("/invoice");
-        else
-            Console.WriteLine("Failed to create invoice.");
+        // Calculate total
+        newInvoice.TotalAmount = newInvoice.SubTotal + newInvoice.TaxAmount;
+    }
+
+    private async Task CreateInvoiceAsync()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+
+            // Validation
+            if (newInvoice.PatientId == 0)
+            {
+                errorMessage = "Please select a patient";
+                return;
+            }
+
+            if (!invoiceItems.Any())
+            {
+                errorMessage = "Please add at least one invoice item";
+                return;
+            }
+
+            if (invoiceItems.Any(i => string.IsNullOrWhiteSpace(i.Description)))
+            {
+                errorMessage = "All items must have a description";
+                return;
+            }
+
+            if (invoiceItems.Any(i => i.Quantity <= 0 || i.UnitPrice <= 0))
+            {
+                errorMessage = "All items must have valid quantity and price";
+                return;
+            }
+
+            // Check if appointment already has an invoice
+            if (newInvoice.AppointmentId.HasValue)
+            {
+                var existingInvoice = existingInvoices.FirstOrDefault(i => i.AppointmentId == newInvoice.AppointmentId.Value);
+                if (existingInvoice != null)
+                {
+                    errorMessage = $"This appointment already has an invoice ({existingInvoice.InvoiceNumber})";
+                    return;
+                }
+            }
+
+            // Final calculation
+            CalculateTotals();
+            newInvoice.DueDate = dueDate;
+
+            // Create invoice
+            var createdInvoice = await AdminService.CreateInvoiceAsync(newInvoice);
+
+            if (createdInvoice != null)
+            {
+                // Create invoice items
+                foreach (var item in invoiceItems)
+                {
+                    item.InvoiceId = createdInvoice.Id;
+                    item.TotalPrice = item.Quantity * item.UnitPrice;
+                    await AdminService.CreateInvoiceItemAsync(item);
+                }
+
+                Navigation.NavigateTo($"/invoice/details/{createdInvoice.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error creating invoice: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
     }
 }
