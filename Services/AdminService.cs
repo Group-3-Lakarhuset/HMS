@@ -1143,5 +1143,164 @@ namespace HMS.Services
         }
 
         #endregion
+
+        #region Transaction Management
+
+        public async Task<List<Transaction>> GetAllTransactionsAsync()
+        {
+            return await _context.Transactions
+                .Include(t => t.Invoice)
+                    .ThenInclude(i => i.Patient)
+                        .ThenInclude(p => p.User)
+                .Include(t => t.Invoice)
+                    .ThenInclude(i => i.Appointment)
+                .OrderByDescending(t => t.TransactionDate)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task<Transaction?> GetTransactionByIdAsync(int id)
+        {
+            return await _context.Transactions
+                .Include(t => t.Invoice)
+                    .ThenInclude(i => i.Patient)
+                        .ThenInclude(p => p.User)
+                .Include(t => t.Invoice)
+                    .ThenInclude(i => i.Appointment)
+                        .ThenInclude(a => a.Staff)
+                            .ThenInclude(s => s.User)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == id);
+        }
+
+        public async Task<List<Transaction>> GetTransactionsByInvoiceIdAsync(int invoiceId)
+        {
+            return await _context.Transactions
+                .Include(t => t.Invoice)
+                .Where(t => t.InvoiceId == invoiceId)
+                .OrderByDescending(t => t.TransactionDate)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task<List<Transaction>> GetTransactionsByPatientIdAsync(int patientId)
+        {
+            return await _context.Transactions
+                .Include(t => t.Invoice)
+                    .ThenInclude(i => i.Appointment)
+                .Where(t => t.Invoice.PatientId == patientId)
+                .OrderByDescending(t => t.TransactionDate)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task<Transaction> CreateTransactionAsync(Transaction transaction)
+        {
+            await EnsureAuthorizedAsync("AdminOrStaff", "create transactions");
+
+            // Generate transaction number if not provided
+            if (string.IsNullOrEmpty(transaction.TransactionNumber))
+            {
+                transaction.TransactionNumber = await GenerateTransactionNumberAsync();
+            }
+
+            transaction.CreatedAt = DateTime.UtcNow;
+            _context.Transactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            // Update invoice status if transaction is completed
+            if (transaction.Status == "Completed" || transaction.Status == "Success")
+            {
+                var invoice = await _context.Invoices.FindAsync(transaction.InvoiceId);
+                if (invoice != null)
+                {
+                    // Check if invoice is fully paid
+                    var totalPaid = await _context.Transactions
+                        .Where(t => t.InvoiceId == transaction.InvoiceId &&
+                               (t.Status == "Completed" || t.Status == "Success"))
+                        .SumAsync(t => t.Amount);
+
+                    if (totalPaid >= invoice.TotalAmount)
+                    {
+                        invoice.Status = "Paid";
+                        _context.Invoices.Update(invoice);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+            }
+
+            return transaction;
+        }
+
+        public async Task<bool> UpdateTransactionAsync(Transaction transaction)
+        {
+            await EnsureAuthorizedAsync("AdminOrStaff", "update transactions");
+
+            var existingTransaction = await _context.Transactions
+                .FirstOrDefaultAsync(t => t.Id == transaction.Id);
+
+            if (existingTransaction == null)
+                return false;
+
+            existingTransaction.Status = transaction.Status;
+            existingTransaction.PaymentMethod = transaction.PaymentMethod;
+            existingTransaction.Amount = transaction.Amount;
+
+            return await _context.SaveChangesAsync() > 0;
+        }
+
+        public async Task<bool> DeleteTransactionAsync(int id)
+        {
+            await EnsureAuthorizedAsync("AdminOnly", "delete transactions");
+
+            var transaction = await _context.Transactions.FindAsync(id);
+            if (transaction == null)
+                return false;
+
+            _context.Transactions.Remove(transaction);
+            return await _context.SaveChangesAsync() > 0;
+        }
+
+        private async Task<string> GenerateTransactionNumberAsync()
+        {
+            var lastTransaction = await _context.Transactions
+                .OrderByDescending(t => t.Id)
+                .FirstOrDefaultAsync();
+
+            var lastNumber = lastTransaction != null ?
+                int.Parse(lastTransaction.TransactionNumber.Replace("TXN", "")) : 0;
+
+            return $"TXN{(lastNumber + 1):D6}";
+        }
+
+        public async Task<decimal> GetTotalRevenueAsync()
+        {
+            return await _context.Transactions
+                .Where(t => t.Status == "Completed" || t.Status == "Success")
+                .SumAsync(t => t.Amount);
+        }
+
+        public async Task<int> GetCompletedTransactionsCountAsync()
+        {
+            return await _context.Transactions
+                .Where(t => t.Status == "Completed" || t.Status == "Success")
+                .CountAsync();
+        }
+
+        public async Task<int> GetPendingTransactionsCountAsync()
+        {
+            return await _context.Transactions
+                .Where(t => t.Status == "Pending")
+                .CountAsync();
+        }
+
+        public async Task<int> GetRefundedTransactionsCountAsync()
+        {
+            return await _context.Transactions
+                .Where(t => t.Status == "Refunded")
+                .CountAsync();
+        }
+
+        #endregion
     }
 }
