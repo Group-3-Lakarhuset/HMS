@@ -390,6 +390,7 @@ namespace HMS.Services
                 .Include(a => a.Staff)
                     .ThenInclude(s => s.User)
                 .Include(a => a.Schedule)
+                .Include(a => a.Invoice)
                 .OrderByDescending(a => a.AppointmentDate)
                 .ToListAsync();
         }
@@ -1087,59 +1088,237 @@ namespace HMS.Services
 
         #region Invoice Management
 
-
         public async Task<List<Invoice>> GetAllInvoicesAsync()
         {
             return await _context.Invoices
+                .Include(i => i.Patient)
+                    .ThenInclude(p => p.User)
                 .Include(i => i.Appointment)
                     .ThenInclude(a => a.Patient)
+                        .ThenInclude(p => p.User)
                 .Include(i => i.Appointment)
                     .ThenInclude(a => a.Staff)
+                        .ThenInclude(s => s.User)
+                .Include(i => i.InvoiceItems)
+                .Include(i => i.Transactions)
+                .OrderByDescending(i => i.CreatedAt)
+                .AsNoTracking()
                 .ToListAsync();
         }
 
         public async Task<Invoice?> GetInvoiceByIdAsync(int id)
         {
             return await _context.Invoices
+                .Include(i => i.Patient)
+                    .ThenInclude(p => p.User)
                 .Include(i => i.Appointment)
                     .ThenInclude(a => a.Patient)
+                        .ThenInclude(p => p.User)
                 .Include(i => i.Appointment)
                     .ThenInclude(a => a.Staff)
+                        .ThenInclude(s => s.User)
+                .Include(i => i.InvoiceItems)
+                .Include(i => i.Transactions)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(i => i.Id == id);
+        }
+
+        public async Task<List<Invoice>> GetInvoicesByPatientIdAsync(int patientId)
+        {
+            return await _context.Invoices
+                .Include(i => i.Appointment)
+                .Include(i => i.InvoiceItems)
+                .Include(i => i.Transactions)
+                .Where(i => i.PatientId == patientId)
+                .OrderByDescending(i => i.CreatedAt)
+                .AsNoTracking()
+                .ToListAsync();
         }
 
         public async Task<Invoice> CreateInvoiceAsync(Invoice invoice)
         {
-            var appointment = await _context.Appointments
-                .FirstOrDefaultAsync(a => a.Id == invoice.AppointmentId);
+            await EnsureAuthorizedAsync("AdminOrStaff", "create invoices");
 
-            if (appointment == null)
-                throw new Exception("Appointment not found for this invoice.");
+            // Generate invoice number if not provided
+            if (string.IsNullOrEmpty(invoice.InvoiceNumber))
+            {
+                invoice.InvoiceNumber = await GenerateInvoiceNumberAsync();
+            }
+
+            invoice.CreatedAt = DateTime.UtcNow;
+
+            // Verify appointment exists
+            if (invoice.AppointmentId.HasValue)
+            {
+                var appointment = await _context.Appointments
+                    .FirstOrDefaultAsync(a => a.Id == invoice.AppointmentId.Value);
+
+                if (appointment == null)
+                    throw new InvalidOperationException("Appointment not found for this invoice.");
+
+                // Set patient ID from appointment if not set
+                if (invoice.PatientId == 0)
+                {
+                    invoice.PatientId = appointment.PatientId;
+                }
+            }
 
             _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync();
-
-            appointment.Invoice = invoice;
-            _context.Appointments.Update(appointment);
             await _context.SaveChangesAsync();
 
             return invoice;
         }
 
-        public async Task UpdateInvoiceAsync(Invoice invoice)
+        public async Task<bool> UpdateInvoiceAsync(Invoice invoice)
         {
-            _context.Invoices.Update(invoice);
-            await _context.SaveChangesAsync();
+            await EnsureAuthorizedAsync("AdminOrStaff", "update invoices");
+
+            var existingInvoice = await _context.Invoices
+                .FirstOrDefaultAsync(i => i.Id == invoice.Id);
+
+            if (existingInvoice == null)
+                return false;
+
+            existingInvoice.SubTotal = invoice.SubTotal;
+            existingInvoice.TaxAmount = invoice.TaxAmount;
+            existingInvoice.TotalAmount = invoice.TotalAmount;
+            existingInvoice.Status = invoice.Status;
+            existingInvoice.DueDate = invoice.DueDate;
+
+            return await _context.SaveChangesAsync() > 0;
         }
 
-        public async Task DeleteInvoiceAsync(int id)
+        public async Task<bool> DeleteInvoiceAsync(int id)
         {
-            var invoice = await _context.Invoices.FindAsync(id);
-            if (invoice != null)
+            await EnsureAuthorizedAsync("AdminOnly", "delete invoices");
+
+            var invoice = await _context.Invoices
+                .Include(i => i.Transactions)
+                .FirstOrDefaultAsync(i => i.Id == id);
+
+            if (invoice == null)
+                return false;
+
+            // Don't allow deletion if there are transactions
+            if (invoice.Transactions.Any())
+                throw new InvalidOperationException("Cannot delete invoice with existing transactions");
+
+            _context.Invoices.Remove(invoice);
+            return await _context.SaveChangesAsync() > 0;
+        }
+
+        private async Task<string> GenerateInvoiceNumberAsync()
+        {
+            var lastInvoice = await _context.Invoices
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync();
+
+            var lastNumber = 0;
+            if (lastInvoice != null && !string.IsNullOrEmpty(lastInvoice.InvoiceNumber))
             {
-                _context.Invoices.Remove(invoice);
-                await _context.SaveChangesAsync();
+                var numberPart = lastInvoice.InvoiceNumber.Replace("INV-", "");
+                int.TryParse(numberPart, out lastNumber);
             }
+
+            return $"INV-{(lastNumber + 1):D6}";
+        }
+
+        #endregion
+
+        #region InvoiceItem Management
+
+        public async Task<List<InvoiceItem>> GetInvoiceItemsByInvoiceIdAsync(int invoiceId)
+        {
+            return await _context.InvoiceItems
+                .Where(i => i.InvoiceId == invoiceId)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task<InvoiceItem?> GetInvoiceItemByIdAsync(int id)
+        {
+            return await _context.InvoiceItems
+                .AsNoTracking()
+                .FirstOrDefaultAsync(i => i.Id == id);
+        }
+
+        public async Task<InvoiceItem> CreateInvoiceItemAsync(InvoiceItem item)
+        {
+            await EnsureAuthorizedAsync("AdminOrStaff", "create invoice items");
+
+            // Calculate total price
+            item.TotalPrice = item.Quantity * item.UnitPrice;
+
+            _context.InvoiceItems.Add(item);
+            await _context.SaveChangesAsync();
+
+            // Update invoice totals
+            await RecalculateInvoiceTotalsAsync(item.InvoiceId);
+
+            return item;
+        }
+
+        public async Task<bool> UpdateInvoiceItemAsync(InvoiceItem item)
+        {
+            await EnsureAuthorizedAsync("AdminOrStaff", "update invoice items");
+
+            var existingItem = await _context.InvoiceItems
+                .FirstOrDefaultAsync(i => i.Id == item.Id);
+
+            if (existingItem == null)
+                return false;
+
+            existingItem.Description = item.Description;
+            existingItem.Quantity = item.Quantity;
+            existingItem.UnitPrice = item.UnitPrice;
+            existingItem.TotalPrice = item.Quantity * item.UnitPrice;
+
+            await _context.SaveChangesAsync();
+
+            // Update invoice totals
+            await RecalculateInvoiceTotalsAsync(existingItem.InvoiceId);
+
+            return true;
+        }
+
+        public async Task<bool> DeleteInvoiceItemAsync(int id)
+        {
+            await EnsureAuthorizedAsync("AdminOrStaff", "delete invoice items");
+
+            var item = await _context.InvoiceItems.FindAsync(id);
+            if (item == null)
+                return false;
+
+            var invoiceId = item.InvoiceId;
+
+            _context.InvoiceItems.Remove(item);
+            await _context.SaveChangesAsync();
+
+            // Update invoice totals
+            await RecalculateInvoiceTotalsAsync(invoiceId);
+
+            return true;
+        }
+
+        private async Task RecalculateInvoiceTotalsAsync(int invoiceId)
+        {
+            var invoice = await _context.Invoices
+                .Include(i => i.InvoiceItems)
+                .FirstOrDefaultAsync(i => i.Id == invoiceId);
+
+            if (invoice == null)
+                return;
+
+            // Calculate subtotal from items
+            invoice.SubTotal = invoice.InvoiceItems.Sum(i => i.TotalPrice);
+
+            // Recalculate tax and total
+            // Preserve the tax percentage
+            var taxRate = invoice.SubTotal > 0 ? invoice.TaxAmount / invoice.SubTotal : 0;
+            invoice.TaxAmount = invoice.SubTotal * taxRate;
+            invoice.TotalAmount = invoice.SubTotal + invoice.TaxAmount;
+
+            await _context.SaveChangesAsync();
         }
 
         #endregion
@@ -1196,7 +1375,7 @@ namespace HMS.Services
 
         public async Task<Transaction> CreateTransactionAsync(Transaction transaction)
         {
-            await EnsureAuthorizedAsync("AdminOrStaff", "create transactions");
+            await EnsureAuthorizedAsync("Authenticated", "create transactions");
 
             // Generate transaction number if not provided
             if (string.IsNullOrEmpty(transaction.TransactionNumber))

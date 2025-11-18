@@ -4,7 +4,7 @@
 @using Microsoft.AspNetCore.Authorization
 @inject AdminService AdminService
 @inject NavigationManager NavigationManager
-@attribute [Authorize(Policy = "AdminOrStaff")]
+@attribute [Authorize(Policy = "AdminOnly")]
 @rendermode InteractiveServer
 
 <PageTitle>Transactions - HMS</PageTitle>
