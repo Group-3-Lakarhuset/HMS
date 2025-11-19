@@ -71,6 +71,24 @@ namespace HMS.Services
                 .Include(tr => tr.Schedule)
                 .FirstOrDefaultAsync(tr => tr.Id == id);
         }
+
+        public async Task<List<TimeReport>> GetTimeReportsByStaffIdAsync(int staffId)
+        {
+            await EnsureAuthorizedAsync("AdminOnly", "view staff time reports");
+
+            // Validate that the staff member exists
+            var staffExists = await _context.Staff.AnyAsync(s => s.Id == staffId);
+            if (!staffExists)
+                throw new ArgumentException($"Staff member with ID {staffId} not found");
+
+            return await _context.TimeReports
+                .Include(tr => tr.Staff)
+                    .ThenInclude(s => s.User)
+                .Include(tr => tr.Schedule)
+                .Where(tr => tr.StaffId == staffId)
+                .OrderByDescending(tr => tr.ClockIn)
+                .ToListAsync();
+        }
         public async Task<(bool Success, string Message)> DeleteTimeReportAsync(int id)
         {
             try
@@ -105,7 +123,7 @@ namespace HMS.Services
              DateTime clockIn,
              DateTime? clockOut,
              string activityType,
-             string notes ="")
+             string notes = "")
         {
             try
             {
@@ -236,7 +254,7 @@ namespace HMS.Services
             }
         }
 
-             
+
 
 
 
@@ -1112,9 +1130,8 @@ namespace HMS.Services
             return generatedSlots;
         }
 
-        /// <summary>
-        /// Regenerate slots for a schedule (delete old slots and create new ones)
-        /// </summary>
+       
+        /// Regenerate slots for a schedule
         public async Task<List<AppointmentSlot>> RegenerateSlotsForScheduleAsync(int scheduleId)
         {
             await EnsureAuthorizedAsync("AdminOrStaff", "regenerate appointment slots");
@@ -1127,7 +1144,7 @@ namespace HMS.Services
             _context.AppointmentSlots.RemoveRange(existingSlots);
             await _context.SaveChangesAsync();
 
-            // Reset the SlotsGenerated flag
+          
             var schedule = await _context.Schedules.FindAsync(scheduleId);
             if (schedule != null)
             {
@@ -1215,14 +1232,14 @@ namespace HMS.Services
                 .FirstOrDefaultAsync(u => u.Id == userId);
         }
 
-        public async Task<ApplicationUser?> GetUserByIdAsync (string id)
+        public async Task<ApplicationUser?> GetUserByIdAsync(string id)
         {
             if (string.IsNullOrEmpty(id)) return null;
 
             return await _userManager.Users
-                .Include (u => u.Patient)
+                .Include(u => u.Patient)
                 .Include(u => u.Staff)
-                .FirstOrDefaultAsync (u => u.Id == id);
+                .FirstOrDefaultAsync(u => u.Id == id);
         }
 
         public async Task<IList<string>> GetUserRolesAsync(ApplicationUser user)
@@ -1252,7 +1269,7 @@ namespace HMS.Services
                     return false;
                 }
 
-                //Save custom fields in ApplicationUser
+                
                 _context.Users.Update(user);
                 var rowsAffected = await _context.SaveChangesAsync();
 
