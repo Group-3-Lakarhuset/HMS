@@ -1379,10 +1379,14 @@ namespace HMS.Services
             if (invoice == null)
                 return false;
 
-            // Don't allow deletion if there are transactions
             if (invoice.Transactions.Any())
-                throw new InvalidOperationException("Cannot delete invoice with existing transactions");
-
+            {
+                _context.Transactions.RemoveRange(invoice.Transactions);
+            }
+            if (invoice.InvoiceItems != null && invoice.InvoiceItems.Any())
+            {
+                _context.InvoiceItems.RemoveRange(invoice.InvoiceItems);
+            }
             _context.Invoices.Remove(invoice);
             return await _context.SaveChangesAsync() > 0;
         }
