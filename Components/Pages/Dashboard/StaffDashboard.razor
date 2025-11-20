@@ -109,7 +109,12 @@
                 </div>
             </div>
         </div>
-
+        <div class="alert alert-info mb-3">
+            <strong>Debug Info:</strong>
+            currentStaff: @(currentStaff?.Id.ToString() ?? "null") |
+            activeTimeReport: @(activeTimeReport?.Id.ToString() ?? "null") |
+            isLoading: @isLoading
+        </div>
         <div class="row g-4">
             <!-- Left Column -->
             <div class="col-lg-8">
