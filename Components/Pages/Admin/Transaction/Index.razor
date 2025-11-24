@@ -244,6 +244,11 @@
                                                     <i class="bi bi-receipt"></i>
                                                 </button>
                                             }
+                                            <button class="btn btn-outline-danger"
+                                                    @onclick="() => OpenDeleteConfirm(transaction)"
+                                                    title="Delete Transaction">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -424,6 +429,45 @@
     </div>
 }
 
+<!-- Delete Confirmation Modal -->
+@if (showDeleteModal && transactionToDelete != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Confirm Delete
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseDeleteModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the following transaction?</p>
+                    <div class="border rounded p-3 bg-light">
+                        <strong>#@transactionToDelete.TransactionNumber</strong><br />
+                        Amount: <strong>@transactionToDelete.Amount.ToString("C")</strong><br />
+                        Date: @transactionToDelete.TransactionDate.ToString("MMM dd, yyyy HH:mm")<br />
+                        Status: <span class="badge bg-@GetStatusColor(transactionToDelete.Status)">@transactionToDelete.Status</span>
+                    </div>
+                    <p class="text-danger mt-3"><strong>This action cannot be undone.</strong></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@isDeleting">
+                        @if (isDeleting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Delete Transaction
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<HMS.Models.Transaction> transactions = new();
     private List<HMS.Models.Transaction> filteredTransactions = new();
@@ -454,6 +498,9 @@
     private HMS.Models.Transaction newTransaction = new();
     private DateTime transactionDateTime = DateTime.Now;
     private HMS.Models.Transaction? selectedTransaction;
+    private bool showDeleteModal = false;
+    private bool isDeleting = false;
+    private HMS.Models.Transaction? transactionToDelete;
 
     protected override async Task OnInitializedAsync()
     {
@@ -481,6 +528,7 @@
             completedCount = transactions.Count(t => t.Status == "Completed" || t.Status == "Success");
             pendingCount = transactions.Count(t => t.Status == "Pending");
             refundedCount = transactions.Count(t => t.Status == "Refunded");
+
 
             ApplyFilters();
         }
@@ -636,5 +684,42 @@
             "Refunded" => "secondary",
             _ => "secondary"
         };
+    }
+
+    private void OpenDeleteConfirm(Transaction transaction)
+    {
+        transactionToDelete = transaction;
+        showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        showDeleteModal = false;
+        transactionToDelete = null;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (transactionToDelete == null) return;
+
+        try
+        {
+            isDeleting = true;
+            errorMessage = null;
+
+            await AdminService.DeleteTransactionAsync(transactionToDelete.Id);
+
+            successMessage = $"Transaction #{transactionToDelete.TransactionNumber} deleted successfully.";
+            CloseDeleteModal();
+            await LoadData(); // Refresh table + stats
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete transaction: {ex.Message}";
+        }
+        finally
+        {
+            isDeleting = false;
+        }
     }
 }

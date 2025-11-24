@@ -1154,23 +1154,37 @@ namespace HMS.Services
             return invoice;
         }
 
-        public async Task<bool> UpdateInvoiceAsync(Invoice invoice)
+        public async Task UpdateInvoiceAsync(Invoice invoice)
         {
-            await EnsureAuthorizedAsync("AdminOrStaff", "update invoices");
+            // Update main invoice fields
+            _context.Invoices.Update(invoice);
 
-            var existingInvoice = await _context.Invoices
-                .FirstOrDefaultAsync(i => i.Id == invoice.Id);
+            // Remove deleted items
+            var existingItems = _context.InvoiceItems.Where(x => x.InvoiceId == invoice.Id).ToList();
 
-            if (existingInvoice == null)
-                return false;
+            foreach (var item in existingItems)
+            {
+                if (!invoice.InvoiceItems.Any(i => i.Id == item.Id))
+                    _context.InvoiceItems.Remove(item);
+            }
 
-            existingInvoice.SubTotal = invoice.SubTotal;
-            existingInvoice.TaxAmount = invoice.TaxAmount;
-            existingInvoice.TotalAmount = invoice.TotalAmount;
-            existingInvoice.Status = invoice.Status;
-            existingInvoice.DueDate = invoice.DueDate;
+            // Add or update invoice items
+            foreach (var item in invoice.InvoiceItems)
+            {
+                item.TotalPrice = item.Quantity * item.UnitPrice;
 
-            return await _context.SaveChangesAsync() > 0;
+                if (item.Id == 0)
+                    _context.InvoiceItems.Add(item);
+                else
+                    _context.InvoiceItems.Update(item);
+            }
+
+            // Update totals
+            invoice.SubTotal = invoice.InvoiceItems.Sum(i => i.TotalPrice);
+            invoice.TaxAmount = invoice.SubTotal * 0.10m;  
+            invoice.TotalAmount = invoice.SubTotal + invoice.TaxAmount;
+
+            await _context.SaveChangesAsync();
         }
 
         public async Task<bool> DeleteInvoiceAsync(int id)

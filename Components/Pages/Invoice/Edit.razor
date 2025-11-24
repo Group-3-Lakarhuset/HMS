@@ -3,55 +3,174 @@
 @using HMS.Models
 @inject AdminService AdminService
 @inject NavigationManager Navigation
+@rendermode InteractiveServer
 
-<h3>Edit Invoice</h3>
+<h3 class="mb-4">✏️ Edit Invoice</h3>
 
 @if (invoice == null)
 {
-    <p>Loading...</p>
+    <p>Loading invoice...</p>
 }
 else
 {
-    <EditForm Model="invoice" OnValidSubmit="Save">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
+    <div class="card shadow-sm p-4">
 
-        <div class="mb-3">
-            <label>Invoice Number</label>
-            <InputText class="form-control" @bind-Value="invoice.InvoiceNumber" />
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label class="form-label">Invoice Number</label>
+                <input class="form-control" @bind="invoice.InvoiceNumber" disabled />
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Status</label>
+                <select class="form-select" @bind="invoice.Status">
+                    <option value="Pending">Pending</option>
+                    <option value="Unpaid">Unpaid</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Partially Paid">Partially Paid</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Due Date</label>
+                <input type="date" class="form-control"
+                       @bind="invoice.DueDate"
+                       @bind:format="yyyy-MM-dd" />
+            </div>
         </div>
 
-        <div class="mb-3">
-            <label>Status</label>
-            <InputText class="form-control" @bind-Value="invoice.Status" />
+        <hr />
+
+        <!-- Invoice Items -->
+        <h5 class="fw-bold mb-3">Invoice Items</h5>
+
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit Price</th>
+                    <th>Total</th>
+                    <th></th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var item in invoice.InvoiceItems)
+                {
+                    <tr>
+                        <td>
+                            <input class="form-control" @bind="item.Description" />
+                        </td>
+
+                        <td>
+                            <input type="number" class="form-control"
+                                   @bind="item.Quantity"
+                                   @bind:after="RecalculateTotals" />
+                        </td>
+
+                        <td>
+                            <input type="number" step="0.01" class="form-control"
+                                   @bind="item.UnitPrice"
+                                   @bind:after="RecalculateTotals" />
+                        </td>
+
+                        <td>@item.TotalPrice.ToString("C")</td>
+
+                        <td>
+                            <button class="btn btn-sm btn-danger" @onclick="(() => RemoveItem(item))">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <button class="btn btn-secondary mb-3" @onclick="AddItem">
+            <i class="bi bi-plus-circle"></i> Add Item
+        </button>
+
+        <hr />
+
+        <div class="text-end">
+            <h5>Subtotal: @invoice.SubTotal.ToString("C")</h5>
+            <h5>Tax: @invoice.TaxAmount.ToString("C")</h5>
+            <h4 class="fw-bold">Total: @invoice.TotalAmount.ToString("C")</h4>
         </div>
 
-        <div class="mb-3">
-            <label>Total</label>
-            <InputNumber class="form-control" @bind-Value="invoice.TotalAmount" />
+        <div class="mt-4 d-flex justify-content-between">
+            <button class="btn btn-light" @onclick="GoBack">Back</button>
+            <button class="btn btn-success" @onclick="SaveInvoice">Save Changes</button>
         </div>
 
-        <button class="btn btn-primary">Save Changes</button>
-        <button type="button" class="btn btn-secondary ms-2" @onclick="GoBack">Cancel</button>
-    </EditForm>
+    </div>
 }
 
 @code {
-    [Parameter] public int Id { get; set; }
-    private Invoice? invoice;
+    [Parameter] public int id { get; set; }
+
+    private Invoice? invoice = new ();
+    private string dueDateString = "";
 
     protected override async Task OnInitializedAsync()
     {
-        invoice = await AdminService.GetInvoiceByIdAsync(Id);
+        invoice = await AdminService.GetInvoiceByIdAsync(id);
+
+        if (invoice != null)
+        {
+            dueDateString = invoice.DueDate.ToString("yyyy-MM-dd");
+            RecalculateTotals();
+        }
     }
 
-    private async Task Save()
+    private void AddItem()
     {
-        // var success = await AdminService.UpdateInvoiceAsync(invoice);
+        invoice.InvoiceItems.Add(new InvoiceItem
+        {
+            Description = "",
+            Quantity = 1,
+            UnitPrice = 0
+        });
 
-        // if (success)
-        //     Navigation.NavigateTo("/invoice");
+        RecalculateTotals();
     }
 
-    private void GoBack() => Navigation.NavigateTo("/invoice");
+    private void RemoveItem(InvoiceItem item)
+    {
+        invoice.InvoiceItems.Remove(item);
+        RecalculateTotals();
+    }
+
+    private void RecalculateTotals()
+    {
+        decimal subtotal = 0;
+
+        foreach (var item in invoice.InvoiceItems)
+        {
+            item.TotalPrice = item.Quantity * item.UnitPrice;
+            subtotal += item.TotalPrice;
+        }
+
+        invoice.SubTotal = subtotal;
+        invoice.TaxAmount = subtotal * 0.10m;   
+        invoice.TotalAmount = invoice.SubTotal + invoice.TaxAmount;
+    }
+
+    private async Task SaveInvoice()
+    {
+        if (DateTime.TryParse(dueDateString, out var date))
+            invoice.DueDate = date;
+
+        RecalculateTotals();
+
+        await AdminService.UpdateInvoiceAsync(invoice);
+        Navigation.NavigateTo("/invoice");
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/invoice");
+    }
 }
