@@ -102,18 +102,10 @@
         </AuthorizeView>
 
         <!-- Time Reports - Separate for Admin and Staff -->
-        <AuthorizeView Roles="Admin">
+        <AuthorizeView Policy="AdminOrStaff">
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/admin/timereport/index">
-                    <i class="bi bi-clock-history me-2" aria-hidden="true"></i> Time Reports (Admin)
-                </NavLink>
-            </div>
-        </AuthorizeView>
-
-        <AuthorizeView Roles="Staff">
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="timereport">
-                    <i class="bi bi-clock-history me-2" aria-hidden="true"></i> My Time Reports
+                <NavLink class="nav-link" href="/timereport">
+                    <i class="bi bi-clock-history me-2" aria-hidden="true"></i> Time Report
                 </NavLink>
             </div>
         </AuthorizeView>

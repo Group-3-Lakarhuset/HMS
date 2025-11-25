@@ -396,9 +396,21 @@ namespace HMS.Services
                 .ToListAsync();
         }
 
-        
+        public async Task<List<TimeReport>> GetMyAdminTimeReportsAsync()
+        {
+            await EnsureAuthorizedAsync("AdminOrStaff", "view own time reports");
+
+            return await _context.TimeReports
+                .Include(tr => tr.Staff)
+                    .ThenInclude(s => s.User)
+                .Include(tr => tr.Schedule)
+                .OrderByDescending(tr => tr.ClockIn)
+                .ToListAsync();
+        }
+
+
         /// Get the current active time report for the current staff member
-        
+
         public async Task<TimeReport?> GetActiveTimeReportAsync()
         {
             await EnsureAuthorizedAsync("AdminOrStaff", "view active time report");

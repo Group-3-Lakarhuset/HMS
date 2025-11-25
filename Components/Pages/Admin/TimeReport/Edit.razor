@@ -68,7 +68,8 @@
                                     {
                                         <option value="@schedule.Id">
                                             @schedule.Staff?.User?.FirstName @schedule.Staff?.User?.LastName -
-                                            @schedule.StartTime.ToString("yyyy-MM-dd HH:mm")
+                                            @schedule.Date.ToString("yyyy-MM-dd") -
+                                            @schedule.StartTime.ToString(@"hh\:mm")
                                         </option>
                                     }
                                 </select>
@@ -366,7 +367,7 @@
 
             if (result.Success)
             {
-                Navigation.NavigateTo("/admin/timereport/index");
+                Navigation.NavigateTo("/timereport");
             }
             else
             {
@@ -393,6 +394,6 @@
 
     private void Cancel()
     {
-        Navigation.NavigateTo("/admin/timereport/index");
+        Navigation.NavigateTo("/timereport");
     }
 }
