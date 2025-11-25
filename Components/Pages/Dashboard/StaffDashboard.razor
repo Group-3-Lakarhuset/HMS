@@ -128,6 +128,7 @@
                                               @bind="deviationReason"
                                               rows="2"
                                               placeholder="Enter reason for early arrival or late departure..."></textarea>
+                                    <button @onclick="ClockInAsync">Submit</button>
                                 </div>
                             </div>
                         }
@@ -534,6 +535,11 @@
                         clockActionLoading = false;
                         return;
                     }
+                }
+                else
+                {
+                    throw new Exception("No schedule found for today.");
+                    return;
                 }
             }
 

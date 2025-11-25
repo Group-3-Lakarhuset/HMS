@@ -397,7 +397,7 @@
         try
         {
             isLoading = true;
-            timeReports = await AdminService.GetMyAdminTimeReportsAsync();
+            timeReports = await AdminService.GetMyTimeReportsAsync();
 
             // Calculate statistics
             var now = DateTime.Now;

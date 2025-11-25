@@ -385,29 +385,25 @@ namespace HMS.Services
 
             var currentStaff = await GetCurrentStaffAsync();
             if (currentStaff == null)
-                throw new InvalidOperationException("Current user is not associated with a staff member");
-
-            return await _context.TimeReports
-                .Include(tr => tr.Staff)
-                    .ThenInclude(s => s.User)
-                .Include(tr => tr.Schedule)
-                .Where(tr => tr.StaffId == currentStaff.Id)
-                .OrderByDescending(tr => tr.ClockIn)
-                .ToListAsync();
-        }
-
-        public async Task<List<TimeReport>> GetMyAdminTimeReportsAsync()
-        {
-            await EnsureAuthorizedAsync("AdminOrStaff", "view own time reports");
-
-            return await _context.TimeReports
+            {
+                return await _context.TimeReports
                 .Include(tr => tr.Staff)
                     .ThenInclude(s => s.User)
                 .Include(tr => tr.Schedule)
                 .OrderByDescending(tr => tr.ClockIn)
                 .ToListAsync();
+            }
+            else
+            {
+                return await _context.TimeReports
+                    .Include(tr => tr.Staff)
+                        .ThenInclude(s => s.User)
+                    .Include(tr => tr.Schedule)
+                    .Where(tr => tr.StaffId == currentStaff.Id)
+                    .OrderByDescending(tr => tr.ClockIn)
+                    .ToListAsync();
+            }
         }
-
 
         /// Get the current active time report for the current staff member
 
