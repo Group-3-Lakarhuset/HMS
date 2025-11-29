@@ -1,0 +1,842 @@
+﻿@page "/leaves"
+@using HMS.Models
+@using HMS.Services
+@using Microsoft.AspNetCore.Authorization
+@inject AdminService AdminService
+@inject IJSRuntime JSRuntime
+@attribute [Authorize(Policy = "AdminOrStaff")]
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>Leave Management</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h3>@pageTitle</h3>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="ShowCreateModal">
+                <i class="bi bi-plus-circle"></i> Request Leave
+            </button>
+        </div>
+    </div>
+    @if (currentStaffId > 0)
+    {
+        <LeaveBalanceCard StaffId="@currentStaffId" />
+    }
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs mb-3">
+        @if (isAdmin)
+        {
+            <li class="nav-item">
+                <a class="nav-link @(activeTab == "pending" ? "active" : "")"
+                   @onclick='() => ChangeTab("pending")'
+                   style="cursor: pointer;">
+                    Pending Approvals
+                    @if (pendingCount > 0)
+                    {
+                        <span class="badge bg-danger">@pendingCount</span>
+                    }
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(activeTab == "all" ? "active" : "")"
+                   @onclick='() => ChangeTab("all")'
+                   style="cursor: pointer;">
+                    All Leaves
+                </a>
+            </li>
+        }
+        else
+        {
+            <li class="nav-item">
+                <a class="nav-link active">My Leaves</a>
+            </li>
+        }
+    </ul>
+
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status"></div>
+        </div>
+    }
+    else if (leaves == null || !leaves.Any())
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No leave requests found.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        @if (isAdmin)
+                        {
+                            <th>Staff</th>
+                        }
+                        <th>Type</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Days</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var leave in leaves)
+                    {
+                        <tr>
+                            @if (isAdmin)
+                            {
+                                <td>
+                                    <strong>@leave.Staff?.User?.FirstName @leave.Staff?.User?.LastName</strong>
+                                    <br />
+                                    <small class="text-muted">@leave.Staff?.Department</small>
+                                </td>
+                            }
+                            <td>
+                                <span class="badge bg-info">@leave.LeaveType</span>
+                            </td>
+                            <td>@leave.StartDate.ToString("MMM dd, yyyy")</td>
+                            <td>@leave.EndDate.ToString("MMM dd, yyyy")</td>
+                            <td>@leave.TotalDays days</td>
+                            <td>
+                                <span title="@leave.Reason">
+                                    @(leave.Reason?.Length > 30 ? leave.Reason.Substring(0, 30) + "..." : leave.Reason)
+                                </span>
+                            </td>
+                            <td>
+                                @if (leave.Status == LeaveStatus.Pending)
+                                {
+                                    <span class="badge bg-warning text-dark">Pending</span>
+                                }
+                                else if (leave.Status == LeaveStatus.Approved)
+                                {
+                                    <span class="badge bg-success">Approved</span>
+                                    @if (leave.ApprovedAt.HasValue)
+                                    {
+                                        <br />
+                                        <small class="text-muted">@leave.ApprovedAt.Value.ToString("MMM dd")</small>
+                                    }
+                                }
+                                else if (leave.Status == LeaveStatus.Rejected)
+                                {
+                                    <span class="badge bg-danger">Rejected</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Cancelled</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    @if (isAdmin)
+                                    {
+                                        @if (leave.Status == LeaveStatus.Pending)
+                                        {
+                                            <button class="btn btn-sm btn-success" @onclick="() => ShowApproveModal(leave)" title="Approve">
+                                                <i class="bi bi-check-circle"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" @onclick="() => ShowRejectModal(leave)" title="Reject">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        }
+                                        else if (leave.Status == LeaveStatus.Approved || leave.Status == LeaveStatus.Rejected)
+                                        {
+                                            <button class="btn btn-sm btn-warning" @onclick="() => ReturnToPending(leave.Id)" title="Return to Pending">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                        }
+
+                                        @if (leave.Status != LeaveStatus.Cancelled)
+                                        {
+                                            <button class="btn btn-sm btn-secondary" @onclick="() => CancelLeave(leave.Id)" title="Cancel">
+                                                <i class="bi bi-slash-circle"></i>
+                                            </button>
+                                        }
+
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteLeave(leave.Id)" title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+
+                                        @if (isAdmin || leave.Status == LeaveStatus.Rejected || leave.Status == LeaveStatus.Approved)
+                                        {
+                                            <button class="btn btn-sm btn-info" @onclick="() => ShowDetails(leave)" title="View Details">
+                                                <i class="bi bi-info-circle"></i>
+                                            </button>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @if (leave.Status == LeaveStatus.Pending || leave.Status == LeaveStatus.Approved)
+                                        {
+                                            <button class="btn btn-sm btn-danger" @onclick="() => CancelLeave(leave.Id)">
+                                                Cancel
+                                            </button>
+                                        }
+
+                                        @if (leave.Status == LeaveStatus.Rejected && !string.IsNullOrEmpty(leave.RejectionReason))
+                                        {
+                                            <button class="btn btn-sm btn-info" @onclick="() => ShowDetails(leave)">
+                                                View Reason
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- Approve Modal -->
+@if (showApproveModal && selectedLeave != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Approve Leave Request</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModals"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Staff:</strong> @selectedLeave.Staff?.User?.FirstName @selectedLeave.Staff?.User?.LastName</p>
+                    <p><strong>Type:</strong> @selectedLeave.LeaveType</p>
+                    <p><strong>Period:</strong> @selectedLeave.StartDate.ToString("MMM dd") - @selectedLeave.EndDate.ToString("MMM dd, yyyy")</p>
+                    <p><strong>Days:</strong> @selectedLeave.TotalDays</p>
+                    <p><strong>Reason:</strong> @selectedLeave.Reason</p>
+
+                    <div class="mb-3">
+                        <label class="form-label">Approval Notes (Optional)</label>
+                        <textarea class="form-control" @bind="approvalNotes" rows="2"></textarea>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModals">Cancel</button>
+                    <button type="button" class="btn btn-success" @onclick="ApproveLeave" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm"></span>
+                        }
+                        Approve Leave
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Reject Modal -->
+@if (showRejectModal && selectedLeave != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Reject Leave Request</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModals"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Staff:</strong> @selectedLeave.Staff?.User?.FirstName @selectedLeave.Staff?.User?.LastName</p>
+                    <p><strong>Type:</strong> @selectedLeave.LeaveType</p>
+                    <p><strong>Period:</strong> @selectedLeave.StartDate.ToString("MMM dd") - @selectedLeave.EndDate.ToString("MMM dd, yyyy")</p>
+
+                    <div class="mb-3">
+                        <label class="form-label">Rejection Reason <span class="text-danger">*</span></label>
+                        <textarea class="form-control" @bind="rejectionReason" rows="3" required></textarea>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModals">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="RejectLeave" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm"></span>
+                        }
+                        Reject Leave
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Create Leave Modal -->
+@if (showCreateModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Request Leave</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModals"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="newLeave" OnValidSubmit="CreateLeave">
+                        <DataAnnotationsValidator />
+
+                        @if (isAdmin)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Select Staff Member <span class="text-danger">*</span></label>
+                                <InputSelect class="form-select" @bind-Value="newLeave.StaffId">
+                                    <option value="0">-- Select Staff --</option>
+                                    @if (staffList != null)
+                                    {
+                                        @foreach (var staff in staffList)
+                                        {
+                                            <option value="@staff.Id">
+                                                @staff.User?.FirstName @staff.User?.LastName (@staff.Department)
+                                            </option>
+                                        }
+                                    }
+                                </InputSelect>
+                                <small class="text-muted">Select a staff member to request leave on their behalf</small>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Leave Type</label>
+                            <InputSelect class="form-select" @bind-Value="newLeave.LeaveType">
+                                <option value="@LeaveType.Vacation">Vacation (Semester)</option>
+                                <option value="@LeaveType.Sick">Sick Leave (Sjuk)</option>
+                                <option value="@LeaveType.VAB">VAB (Vård av barn)</option>
+                                <option value="@LeaveType.Other">Other</option>
+                            </InputSelect>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Start Date</label>
+                            <InputDate class="form-control" @bind-Value="newLeave.StartDate" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">End Date</label>
+                            <InputDate class="form-control" @bind-Value="newLeave.EndDate" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Reason</label>
+                            <InputTextArea class="form-control" @bind-Value="newLeave.Reason" rows="3" />
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger">@errorMessage</div>
+                        }
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseModals">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm"></span>
+                                }
+                                Submit Request
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Details Modal -->
+@if (showDetailsModal && selectedLeave != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">Leave Details</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModals"></button>
+                </div>
+                <div class="modal-body">
+                    @if (selectedLeave.StaffId > 0)
+                    {
+                        <LeaveBalanceCard StaffId="@selectedLeave.StaffId" />
+                    }
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Staff:</strong>
+                            <p>@selectedLeave.Staff?.User?.FirstName @selectedLeave.Staff?.User?.LastName</p>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Department:</strong>
+                            <p>@selectedLeave.Staff?.Department</p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Leave Type:</strong>
+                            <p><span class="badge bg-info">@selectedLeave.LeaveType</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Status:</strong>
+                            <p>
+                                @if (selectedLeave.Status == LeaveStatus.Pending)
+                                {
+                                    <span class="badge bg-warning text-dark">Pending</span>
+                                }
+                                else if (selectedLeave.Status == LeaveStatus.Approved)
+                                {
+                                    <span class="badge bg-success">Approved</span>
+                                }
+                                else if (selectedLeave.Status == LeaveStatus.Rejected)
+                                {
+                                    <span class="badge bg-danger">Rejected</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Cancelled</span>
+                                }
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <strong>Start Date:</strong>
+                            <p>@selectedLeave.StartDate.ToString("MMM dd, yyyy")</p>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>End Date:</strong>
+                            <p>@selectedLeave.EndDate.ToString("MMM dd, yyyy")</p>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Total Days:</strong>
+                            <p>@selectedLeave.TotalDays days</p>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <strong>Reason:</strong>
+                        <p class="border p-2 bg-light rounded">@selectedLeave.Reason</p>
+                    </div>
+
+                    @if (selectedLeave.Status == LeaveStatus.Approved)
+                    {
+                        <div class="mb-3">
+                            <strong>Approved By:</strong>
+                            <p>@selectedLeave.ApproverUser?.FirstName @selectedLeave.ApproverUser?.LastName</p>
+                        </div>
+
+                        @if (selectedLeave.ApprovedAt.HasValue)
+                        {
+                            <div class="mb-3">
+                                <strong>Approved At:</strong>
+                                <p>@selectedLeave.ApprovedAt.Value.ToString("MMM dd, yyyy HH:mm")</p>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(selectedLeave.ApprovalNotes))
+                        {
+                            <div class="mb-3">
+                                <strong>Approval Notes:</strong>
+                                <p class="border p-2 bg-light rounded">@selectedLeave.ApprovalNotes</p>
+                            </div>
+                        }
+                    }
+
+                    @if (selectedLeave.Status == LeaveStatus.Rejected)
+                    {
+                        <div class="mb-3">
+                            <strong>Rejected By:</strong>
+                            <p>@selectedLeave.ApproverUser?.FirstName @selectedLeave.ApproverUser?.LastName</p>
+                        </div>
+
+                        @if (selectedLeave.ApprovedAt.HasValue)
+                        {
+                            <div class="mb-3">
+                                <strong>Rejected At:</strong>
+                                <p>@selectedLeave.ApprovedAt.Value.ToString("MMM dd, yyyy HH:mm")</p>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(selectedLeave.RejectionReason))
+                        {
+                            <div class="alert alert-danger">
+                                <strong>Rejection Reason:</strong>
+                                <p class="mb-0">@selectedLeave.RejectionReason</p>
+                            </div>
+                        }
+                    }
+
+                    @if (selectedLeave.Status == LeaveStatus.Cancelled && selectedLeave.CancelledAt.HasValue)
+                    {
+                        <div class="mb-3">
+                            <strong>Cancelled At:</strong>
+                            <p>@selectedLeave.CancelledAt.Value.ToString("MMM dd, yyyy HH:mm")</p>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <strong>Created At:</strong>
+                        <p>@selectedLeave.CreatedAt.ToString("MMM dd, yyyy HH:mm")</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModals">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+    private List<Leave>? leaves;
+    private List<HMS.Models.Staff>? staffList;
+    private Leave? selectedLeave;
+    private bool isLoading = true;
+    private bool isAdmin = false;
+    private bool showDetailsModal = false;
+    private bool showCreateModal = false;
+    private bool showApproveModal = false;
+    private bool showRejectModal = false;
+    private bool isSubmitting = false;
+    private int currentStaffId;
+    private string? errorMessage;
+    private string? approvalNotes;
+    private string? rejectionReason;
+    private string activeTab = "pending";
+    private int pendingCount = 0;
+    private string pageTitle = "Leave Management";
+    private LeaveRequestModel newLeave = new();
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckUserRole();
+        await LoadLeaves();
+    }
+
+    private async Task CheckUserRole()
+    {
+        if (AuthenticationState == null) return;
+
+        var authState = await AuthenticationState;
+        var user = authState.User;
+
+        isAdmin = user.IsInRole("Admin");
+        pageTitle = isAdmin ? "Leave Management" : "My Leaves";
+    }
+
+    private async Task LoadLeaves()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            if (isAdmin)
+            {
+                if (activeTab == "pending")
+                {
+                    leaves = await AdminService.GetPendingLeavesAsync();
+                }
+                else
+                {
+                    leaves = await AdminService.GetAllLeavesAsync();
+                }
+
+                
+                // Get pending count for badge
+                var pending = await AdminService.GetPendingLeavesAsync();
+                pendingCount = pending.Count;
+            }
+            else
+            {
+                leaves = await AdminService.GetMyLeavesAsync();
+                var currentStaff = await GetCurrentStaffId();
+                if (currentStaff.HasValue)
+                    currentStaffId = currentStaff.Value;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task<int?> GetCurrentStaffId()
+    {
+        var user = await AdminService.GetCurrentUserAsync();
+        return user?.Staff?.Id;
+    }
+
+    private async Task ChangeTab(string tab)
+    {
+        activeTab = tab;
+        await LoadLeaves();
+    }
+
+    private void ShowApproveModal(Leave leave)
+    {
+        selectedLeave = leave;
+        approvalNotes = null;
+        errorMessage = null;
+        showApproveModal = true;
+    }
+
+    private void ShowRejectModal(Leave leave)
+    {
+        selectedLeave = leave;
+        rejectionReason = null;
+        errorMessage = null;
+        showRejectModal = true;
+    }
+
+    private async Task ShowCreateModal()
+    {
+        newLeave = new LeaveRequestModel
+        {
+            StartDate = DateTime.Today.AddDays(1),
+            EndDate = DateTime.Today.AddDays(2),
+            StaffId = isAdmin ? 0 : currentStaffId
+        };
+
+        // Load staff list if admin
+        if (isAdmin)
+        {
+            try
+            {
+                staffList = await AdminService.GetAllStaffAsync();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error loading staff list: {ex.Message}";
+            }
+        }
+
+        errorMessage = null;
+        showCreateModal = true;
+    }
+
+    private void ShowDetails(Leave leave)
+    {
+        selectedLeave = leave;
+        showDetailsModal = true;
+    }
+
+    private void CloseModals()
+    {
+        showApproveModal = false;
+        showCreateModal = false;
+        showDetailsModal = false;
+        showRejectModal = false;
+        selectedLeave = null;
+        errorMessage = null;
+    }
+
+    private async Task CreateLeave()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            // Validate staff selection for admin
+            if (isAdmin && newLeave.StaffId == 0)
+            {
+                errorMessage = "Please select a staff member";
+                isSubmitting = false;
+                return;
+            }
+
+            // Use selected staff ID for admin, or current staff ID for staff
+            var staffId = isAdmin ? newLeave.StaffId : currentStaffId;
+
+            var result = await AdminService.CreateLeaveRequestAsync(
+                staffId,
+                newLeave.LeaveType,
+                newLeave.StartDate,
+                newLeave.EndDate,
+                newLeave.Reason ?? ""
+            );
+
+            if (result.Success)
+            {
+                CloseModals();
+                await LoadLeaves();
+            }
+            else
+            {
+                errorMessage = result.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task ApproveLeave()
+    {
+        if (selectedLeave == null) return;
+
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            var result = await AdminService.ApproveLeaveAsync(selectedLeave.Id, approvalNotes);
+
+            if (result.Success)
+            {
+                CloseModals();
+                await LoadLeaves();
+            }
+            else
+            {
+                errorMessage = result.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task RejectLeave()
+    {
+        if (selectedLeave == null || string.IsNullOrWhiteSpace(rejectionReason))
+        {
+            errorMessage = "Rejection reason is required";
+            return;
+        }
+
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            var result = await AdminService.RejectLeaveAsync(selectedLeave.Id, rejectionReason);
+
+            if (result.Success)
+            {
+                CloseModals();
+                await LoadLeaves();
+            }
+            else
+            {
+                errorMessage = result.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task CancelLeave(int leaveId)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this leave?"))
+            return;
+
+        var result = await AdminService.CancelLeaveAsync(leaveId);
+        if (result.Success)
+        {
+            await LoadLeaves();
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("alert", result.Message);
+        }
+    }
+
+    private async Task DeleteLeave(int leaveId)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to DELETE this leave? This action cannot be undone."))
+            return;
+
+        try
+        {
+            var result = await AdminService.DeleteLeaveAsync(leaveId);
+            if (result.Success)
+            {
+                await LoadLeaves();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+
+    private async Task ReturnToPending(int leaveId)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to return this leave to pending status?"))
+            return;
+
+        try
+        {
+            var result = await AdminService.ReturnLeaveToPendingAsync(leaveId);
+            if (result.Success)
+            {
+                await LoadLeaves();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+
+    public class LeaveRequestModel
+    {
+        public int StaffId { get; set; }
+        public LeaveType LeaveType { get; set; } = LeaveType.Vacation;
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public string? Reason { get; set; }
+    }
+
+}

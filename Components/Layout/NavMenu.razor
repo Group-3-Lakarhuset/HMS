@@ -90,6 +90,16 @@
                 </NavLink>
             </div>
             <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/leaves">
+                    <i class="bi bi-door-open me-2" aria-hidden="true"></i> Leaves
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/timereport">
+                    <i class="bi bi-clock-history me-2" aria-hidden="true"></i> Time Report
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
                 <NavLink class="nav-link" href="invoice">
                     <i class="bi bi-receipt me-2" aria-hidden="true"></i> Invoices
                 </NavLink>
@@ -99,15 +109,7 @@
                     <i class="bi bi-credit-card me-2" aria-hidden="true"></i> Transactions
                 </NavLink>
             </div>
-        </AuthorizeView>
 
-        <!-- Time Reports - Separate for Admin and Staff -->
-        <AuthorizeView Policy="AdminOrStaff">
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/timereport">
-                    <i class="bi bi-clock-history me-2" aria-hidden="true"></i> Time Report
-                </NavLink>
-            </div>
         </AuthorizeView>
 
         <AuthorizeView>

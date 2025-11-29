@@ -17,7 +17,8 @@ namespace HMS.Data
         public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<Appointment> Appointments { get; set; }
-        //public DbSet<Leave> Leaves { get; set; }
+        public DbSet<Leave> Leaves { get; set; }
+        public DbSet<LeaveBalance> LeaveBalances { get; set; }
 
         // New appointment booking system models
         public DbSet<AppointmentSlot> AppointmentSlots { get; set; }
@@ -173,14 +174,33 @@ namespace HMS.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
             // LEAVES
+            builder.Entity<Leave>(entity =>
+            {
+                entity.HasOne(e => e.Staff)
+                    .WithMany(s => s.Leaves)
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Restrict);
 
-            /*            builder.Entity<Leave>(entity =>
-                        {
-                            entity.HasOne(e => e.Staff)
-                            .WithMany(c => c.Leaves)
-                            .HasForeignKey(entity => entity.StaffId)
-                            .OnDelete(DeleteBehavior.Cascade);
-                        });*/
+                entity.HasOne(e => e.ApproverUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.ApprovedBy)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired(false);
+
+                entity.Property(e => e.TotalDays)
+                    .HasColumnType("decimal(5,2)");
+            });
+
+            builder.Entity<LeaveBalance>(entity =>
+            {
+                entity.HasOne(e => e.Staff)
+                    .WithMany()
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(e => new { e.StaffId, e.Year })
+                    .IsUnique();
+            });
         }
     }
 }

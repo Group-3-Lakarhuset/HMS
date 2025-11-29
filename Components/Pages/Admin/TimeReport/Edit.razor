@@ -59,20 +59,27 @@
                                 </select>
                             </div>
 
-                            <!-- Schedule Selection (Optional) -->
+                            <!-- Schedule Selection -->
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Schedule (Optional)</label>
+                                <label class="form-label">Schedule</label>
                                 <select class="form-select" @onchange="UpdateDatesFromSchedule">
                                     <option value="0">-- No Schedule --</option>
                                     @foreach (var schedule in FilteredSchedules)
                                     {
-                                        <option value="@schedule.Id">
+                                        var isOnLeave = schedule.Status == "On-Leave";
+                                        var isCurrentSchedule = schedule.Id == selectedScheduleId;
+                                        <option value="@schedule.Id"
+                                                selected="@isCurrentSchedule"
+                                                disabled="@(isOnLeave && !isCurrentSchedule)"
+                                                class="@(isOnLeave ? "text-muted" : "")">
                                             @schedule.Staff?.User?.FirstName @schedule.Staff?.User?.LastName -
                                             @schedule.Date.ToString("yyyy-MM-dd") -
                                             @schedule.StartTime.ToString(@"hh\:mm")
+                                            @(isOnLeave ? " [ON LEAVE]" : "")
                                         </option>
                                     }
                                 </select>
+                                <small class="text-muted">Note: Schedules marked as "On-Leave" cannot be selected (except if already assigned)</small>
                             </div>
 
                             <!-- Clock In Date -->

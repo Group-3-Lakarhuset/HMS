@@ -12,7 +12,7 @@
 
 <div class="container-fluid py-4">
     <div class="row justify-content-center">
-        <div class="col-lg-8">
+        <div class="col-lg-10">
             <div class="card">
                 <div class="card-header bg-success text-white">
                     <h4 class="mb-0">
@@ -58,20 +58,23 @@
                                 }
                             </div>
 
-                            <!-- Schedule Selection (Optional) -->
+                            <!-- Schedule Selection -->
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Schedule (Optional)</label>
+                                <label class="form-label">Schedule</label>
                                 <select class="form-select" @onchange="UpdateDatesFromSchedule">
                                     <option value="0">-- No Schedule --</option>
                                     @foreach (var schedule in FilteredSchedules)
                                     {
-                                        <option value="@schedule.Id">
+                                        var isOnLeave = schedule.Status == "On-Leave";
+                                        <option value="@schedule.Id" disabled="@isOnLeave" class="@(isOnLeave ? "text-muted" : "")">
                                             @schedule.Staff?.User?.FirstName @schedule.Staff?.User?.LastName -
                                             @schedule.Date.ToString("yyyy-MM-dd") -
                                             @schedule.StartTime.ToString(@"hh\:mm")
+                                            @(isOnLeave ? " [ON LEAVE - Cannot select]" : "")
                                         </option>
                                     }
                                 </select>
+                                <small class="text-muted">Note: Schedules marked as "On-Leave" cannot be selected</small>
                             </div>
 
                             <!-- Clock In Date -->

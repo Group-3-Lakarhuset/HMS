@@ -177,6 +177,16 @@
                                         </span>
                                     </p>
                                 </div>
+                                @if (schedule.Notes != null)
+                                {
+                                    <div class="mb-3">
+                                        <label class="fw-bold text-muted small">Notes</label>
+                                        <p class="mb-0">
+                                            <i class="bi bi-info-circle me-2"></i>
+                                            @schedule.Notes
+                                        </p>
+                                    </div>
+                                }
                             </div>
 
                             <div class="col-md-6">
@@ -327,7 +337,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="fw-bold text-muted small">Created At</label>
-                                    <p class="mb-0">    
+                                    <p class="mb-0">
                                         <i class="bi bi-calendar-plus me-2"></i>
                                         @schedule.CreatedAt.ToString("yyyy-MM-dd HH:mm")
                                     </p>
@@ -570,6 +580,7 @@
         {
             "scheduled" => "bg-primary",
             "active" => "bg-success",
+            "on-leave" => "bg-warning",
             "completed" => "bg-secondary",
             "cancelled" => "bg-danger",
             _ => "bg-secondary"

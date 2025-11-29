@@ -3,6 +3,7 @@ using HMS.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Radzen.Blazor.Markdown;
 using System.Security.Claims;
 
 namespace HMS.Services
@@ -98,10 +99,19 @@ namespace HMS.Services
                 await EnsureAuthorizedAsync("AdminOnly", "delete time report");
 
                 // Find the time report
-                var timeReport = await _context.TimeReports.FindAsync(id);
+                var timeReport = await _context.TimeReports
+                    .Include(tr => tr.Schedule)
+                    .FirstOrDefaultAsync(tr => tr.Id == id);
 
                 if (timeReport == null)
                     return (false, "Time report not found");
+
+                // Update schedule status back to Scheduled if it was linked
+                if (timeReport.Schedule != null)
+                {
+                    timeReport.Schedule.Status = "Scheduled";
+                    _context.Schedules.Update(timeReport.Schedule);
+                }
 
                 // Remove the time report
                 _context.TimeReports.Remove(timeReport);
@@ -119,19 +129,17 @@ namespace HMS.Services
             }
         }
         public async Task<(bool Success, string Message, TimeReport? TimeReport)> CreateTimeReportAsync(
-             int staffId,
-             int? scheduleId,
-             DateTime clockIn,
-             DateTime? clockOut,
-             string activityType,
-             string notes = "")
+         int staffId,
+         int? scheduleId,
+         DateTime clockIn,
+         DateTime? clockOut,
+         string activityType,
+         string notes = "")
         {
             try
             {
-                // Check authorization - Admin or Staff can create time reports
                 await EnsureAuthorizedAsync("AdminOrStaff", "create time report");
 
-                // Validate that the staff member exists
                 var staffExists = await _context.Staff.AnyAsync(s => s.Id == staffId);
                 if (!staffExists)
                     return (false, "Staff member not found", null);
@@ -143,6 +151,8 @@ namespace HMS.Services
                     schedule = await _context.Schedules.FindAsync(scheduleId.Value);
                     if (schedule == null)
                         return (false, "Schedule not found", null);
+                    if (schedule.Status == "On-Leave")
+                        return (false, "Cannot create time report for a schedule marked as On-Leave. The staff member is on leave for this period.", null);
                 }
 
                 // Check for existing time report for this schedule
@@ -153,6 +163,7 @@ namespace HMS.Services
                 {
                     return (false, $"A time report already exists for this schedule (ID: {existingReport.Id}). Please edit the existing report instead.", null);
                 }
+
                 // Calculate hours worked
                 decimal hoursWorked = 0;
                 if (clockOut.HasValue)
@@ -175,13 +186,25 @@ namespace HMS.Services
                     ApprovalStatus = "Pending"
                 };
 
-                // Calculate deviations if schedule exists
                 CalculateDeviations(timeReport, schedule);
 
                 _context.TimeReports.Add(timeReport);
+
+                if (schedule != null)
+                {
+                    if (clockOut.HasValue)
+                    {
+                        schedule.Status = "Completed";
+                    }
+                    else
+                    {
+                        schedule.Status = "Active";
+                    }
+                    _context.Schedules.Update(schedule);
+                }
+
                 await _context.SaveChangesAsync();
 
-                // Load navigation properties
                 await _context.Entry(timeReport)
                     .Reference(tr => tr.Staff)
                     .LoadAsync();
@@ -265,6 +288,23 @@ namespace HMS.Services
                 existingReport.Notes = timeReport.Notes;
 
                 _context.TimeReports.Update(existingReport);
+
+                // Update schedule status based on time report
+                if (schedule != null)
+                {
+                    if (timeReport.ClockOut.HasValue)
+                    {
+                        // If clocked out, mark schedule as Completed
+                        schedule.Status = "Completed";
+                    }
+                    else
+                    {
+                        // If only clocked in (not clocked out yet), mark schedule as Active
+                        schedule.Status = "Active";
+                    }
+                    _context.Schedules.Update(schedule);
+                }
+
                 await _context.SaveChangesAsync();
 
                 return (true, "Time report updated successfully");
@@ -330,7 +370,6 @@ namespace HMS.Services
                 return (false, $"Error processing time report: {ex.Message}");
             }
         }
-
         // Calculate deviations between clock in/out and scheduled times
         private void CalculateDeviations(TimeReport timeReport, Schedule? schedule)
         {
@@ -377,9 +416,9 @@ namespace HMS.Services
                 .FirstOrDefaultAsync(s => s.UserId == userId);
         }
 
-       
+
         /// Get all time reports for the current logged-in staff member
-        
+
         public async Task<List<TimeReport>> GetMyTimeReportsAsync()
         {
             await EnsureAuthorizedAsync("AdminOrStaff", "view own time reports");
@@ -425,9 +464,9 @@ namespace HMS.Services
                 .FirstOrDefaultAsync();
         }
 
-       
+
         /// Clock In - Creates a new time report with current time as clock in
-        
+
         public async Task<(bool Success, string Message, TimeReport? TimeReport)> ClockInAsync(string activityType = "Regular Work", string notes = "")
         {
             try
@@ -450,6 +489,10 @@ namespace HMS.Services
                     .Where(s => s.StaffId == currentStaff.Id && s.Date.Date == DateTime.Today)
                     .FirstOrDefaultAsync();
 
+                if (todaySchedule != null && todaySchedule.Status == "On-Leave")
+                {
+                    return (false, "You cannot clock in today as you are scheduled for leave. Please contact your administrator if this is incorrect.", null);
+                }
                 // If schedule exists, check for existing completed time report
                 if (todaySchedule != null)
                 {
@@ -482,6 +525,14 @@ namespace HMS.Services
                 CalculateDeviations(timeReport, todaySchedule);
 
                 _context.TimeReports.Add(timeReport);
+
+                // Update schedule status to Active when clocking in
+                if (todaySchedule != null)
+                {
+                    todaySchedule.Status = "Active";
+                    _context.Schedules.Update(todaySchedule);
+                }
+
                 await _context.SaveChangesAsync();
 
                 // Load navigation properties
@@ -514,9 +565,9 @@ namespace HMS.Services
             }
         }
 
-        
+
         //Clock Out - Updates the active time report
-       
+
         public async Task<(bool Success, string Message, TimeReport? TimeReport)> ClockOutAsync(string notes = "")
         {
             try
@@ -558,6 +609,14 @@ namespace HMS.Services
                 CalculateDeviations(activeTimeReport, schedule);
 
                 _context.TimeReports.Update(activeTimeReport);
+
+                // Update schedule status to Completed when clocking out
+                if (schedule != null)
+                {
+                    schedule.Status = "Completed";
+                    _context.Schedules.Update(schedule);
+                }
+
                 await _context.SaveChangesAsync();
 
                 return (true, $"Successfully clocked out at {activeTimeReport.ClockOut:HH:mm}. Hours worked: {activeTimeReport.HoursWorked:F2}", activeTimeReport);
@@ -885,7 +944,20 @@ namespace HMS.Services
         public async Task<Schedule> CreateScheduleAsync(Schedule schedule)
         {
             await EnsureAuthorizedAsync("AdminOrStaff", "create schedules");
+            var existingSchedule = await _context.Schedules
+            .FirstOrDefaultAsync(s =>
+            s.StaffId == schedule.StaffId &&
+            s.Date.Date == schedule.Date.Date &&
+            s.StartTime == schedule.StartTime &&
+            s.EndTime == schedule.EndTime);
 
+            if (existingSchedule != null)
+            {
+                throw new InvalidOperationException(
+                    $"A schedule already exists for this staff member on {schedule.Date:yyyy-MM-dd} " +
+                    $"with the same time ({schedule.StartTime:hh\\:mm} - {schedule.EndTime:hh\\:mm}). " +
+                    $"Staff can have multiple shifts on the same day but with different start and end times.");
+            }
             schedule.CreatedAt = DateTime.UtcNow;
             _context.Schedules.Add(schedule);
             await _context.SaveChangesAsync();
@@ -895,7 +967,21 @@ namespace HMS.Services
         public async Task<bool> UpdateScheduleAsync(Schedule schedule)
         {
             await EnsureAuthorizedAsync("AdminOrStaff", "update schedules");
+            var existingSchedule = await _context.Schedules
+        .FirstOrDefaultAsync(s =>
+            s.Id != schedule.Id &&  
+            s.StaffId == schedule.StaffId &&
+            s.Date.Date == schedule.Date.Date &&
+            s.StartTime == schedule.StartTime &&
+            s.EndTime == schedule.EndTime);
 
+            if (existingSchedule != null)
+            {
+                throw new InvalidOperationException(
+                    $"A schedule already exists for this staff member on {schedule.Date:yyyy-MM-dd} " +
+                    $"with the same time ({schedule.StartTime:hh\\:mm} - {schedule.EndTime:hh\\:mm}). " +
+                    $"Staff can have multiple shifts on the same day but with different start and end times.");
+            }
             _context.Schedules.Update(schedule);
             return await _context.SaveChangesAsync() > 0;
         }
@@ -2010,6 +2096,504 @@ namespace HMS.Services
                 .CountAsync();
         }
 
+        #endregion
+
+        #region Leave Management
+
+        // Get leaves
+        public async Task<List<Leave>> GetAllLeavesAsync()
+        {
+            await EnsureAuthorizedAsync("AdminOnly", "view all leaves");
+            return await _context.Leaves
+                .Include(l => l.Staff).ThenInclude(s => s.User)
+                .Include(l => l.ApproverUser)
+                .OrderByDescending(l => l.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<Leave>> GetMyLeavesAsync()
+        {
+            await EnsureAuthorizedAsync("AdminOrStaff", "view own leaves");
+            var currentStaff = await GetCurrentStaffAsync();
+            if (currentStaff == null)
+                throw new InvalidOperationException("Current user is not associated with a staff member");
+
+            return await _context.Leaves
+                .Include(l => l.ApproverUser)
+                .Where(l => l.StaffId == currentStaff.Id)
+                .OrderByDescending(l => l.StartDate)
+                .ToListAsync();
+        }
+
+        public async Task<List<Leave>> GetPendingLeavesAsync()
+        {
+            await EnsureAuthorizedAsync("AdminOnly", "view pending leaves");
+            return await _context.Leaves
+                .Include(l => l.Staff).ThenInclude(s => s.User)
+                .Where(l => l.Status == LeaveStatus.Pending)
+                .OrderBy(l => l.CreatedAt)
+                .ToListAsync();
+        }
+
+        // Create leave request
+        public async Task<(bool Success, string Message, Leave? Leave)> CreateLeaveRequestAsync(
+            int staffId, LeaveType leaveType, DateTime startDate, DateTime endDate, string reason)
+        {
+            try
+            {
+                await EnsureAuthorizedAsync("AdminOrStaff", "create leave request");
+
+                if (startDate.Date < DateTime.Today)
+                    return (false, "Cannot request leave for past dates", null);
+
+                if (endDate.Date < startDate.Date)
+                    return (false, "End date must be after start date", null);
+
+                // Check overlapping leaves
+                var hasOverlap = await _context.Leaves
+                    .AnyAsync(l => l.StaffId == staffId &&
+                                  l.Status != LeaveStatus.Rejected &&
+                                  l.Status != LeaveStatus.Cancelled &&
+                                  l.StartDate <= endDate.Date &&
+                                  l.EndDate >= startDate.Date);
+
+                if (hasOverlap)
+                    return (false, "You have an overlapping leave request", null);
+
+                // Calculate business days
+                var requestedDays = CalculateBusinessDays(startDate, endDate);
+
+                // Check vacation balance for vacation type
+                if (leaveType == LeaveType.Vacation)
+                {
+                    var year = startDate.Year;
+                    var balance = await GetOrCreateLeaveBalanceAsync(staffId, year);
+
+                    if (balance.VacationDaysRemaining < requestedDays)
+                        return (false, $"Insufficient vacation days. You have {balance.VacationDaysRemaining} days remaining, but requested {requestedDays} days.", null);
+                }
+
+                var leave = new Leave
+                {
+                    StaffId = staffId,
+                    LeaveType = leaveType,
+                    StartDate = startDate.Date,
+                    EndDate = endDate.Date,
+                    TotalDays = requestedDays,
+                    Reason = reason,
+                    Status = LeaveStatus.Pending,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.Leaves.Add(leave);
+                await _context.SaveChangesAsync();
+
+                return (true, "Leave request submitted successfully", leave);
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Error: {ex.Message}", null);
+            }
+        }
+
+        // Approve leave
+        public async Task<(bool Success, string Message)> ApproveLeaveAsync(int leaveId, string? notes = null)
+        {
+            try
+            {
+                await EnsureAuthorizedAsync("AdminOnly", "approve leave");
+
+                var leave = await _context.Leaves
+                    .Include(l => l.Staff)
+                    .FirstOrDefaultAsync(l => l.Id == leaveId);
+
+                if (leave == null)
+                    return (false, "Leave not found");
+
+                if (leave.Status != LeaveStatus.Pending)
+                    return (false, $"Leave is already {leave.Status}");
+
+                var userId = CurrentUser.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                leave.Status = LeaveStatus.Approved;
+                leave.ApprovedBy = userId;
+                leave.ApprovedAt = DateTime.UtcNow;
+                leave.ApprovalNotes = notes;
+
+                await _context.SaveChangesAsync();
+
+                // Apply effects
+                await BlockSchedulesAsync(leave);
+                await CancelAppointmentsAsync(leave);
+                //await CreateLeaveTimeReportsAsync(leave);
+                await UpdateLeaveBalanceOnApprovalAsync(leave);
+
+                return (true, "Leave approved successfully");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Error: {ex.Message}");
+            }
+        }
+
+        // Reject leave
+        public async Task<(bool Success, string Message)> RejectLeaveAsync(int leaveId, string reason)
+        {
+            try
+            {
+                await EnsureAuthorizedAsync("AdminOnly", "reject leave");
+
+                var leave = await _context.Leaves.FindAsync(leaveId);
+                if (leave == null)
+                    return (false, "Leave not found");
+
+                if (leave.Status != LeaveStatus.Pending)
+                    return (false, $"Leave is already {leave.Status}");
+
+                var userId = CurrentUser.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                leave.Status = LeaveStatus.Rejected;
+                leave.ApprovedBy = userId;
+                leave.ApprovedAt = DateTime.UtcNow;
+                leave.RejectionReason = reason;
+
+                await _context.SaveChangesAsync();
+                return (true, "Leave rejected");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Error: {ex.Message}");
+            }
+        }
+
+        // Cancel leave
+        public async Task<(bool Success, string Message)> CancelLeaveAsync(int leaveId)
+        {
+            try
+            {
+                await EnsureAuthorizedAsync("AdminOrStaff", "cancel leave");
+
+                var leave = await _context.Leaves.FindAsync(leaveId);
+                if (leave == null)
+                    return (false, "Leave not found");
+
+                if (leave.Status == LeaveStatus.Approved)
+                {
+                    // Rollback effects
+                    await UnblockSchedulesAsync(leave);
+                    await RemoveLeaveTimeReportsAsync(leave);
+
+                    // Restore leave balance
+                    await UpdateLeaveBalanceOnCancellationAsync(leave);
+                }
+
+                leave.Status = LeaveStatus.Cancelled;
+                leave.CancelledAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                return (true, "Leave cancelled successfully");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Error: {ex.Message}");
+            }
+        }
+
+        // Helper methods
+        private decimal CalculateBusinessDays(DateTime start, DateTime end)
+        {
+            decimal days = 0;
+            var current = start.Date;
+            while (current <= end.Date)
+            {
+                if (current.DayOfWeek != DayOfWeek.Saturday && current.DayOfWeek != DayOfWeek.Sunday)
+                    days++;
+                current = current.AddDays(1);
+            }
+            return days;
+        }
+
+        private async Task BlockSchedulesAsync(Leave leave)
+        {
+            var schedules = await _context.Schedules
+                .Where(s => s.StaffId == leave.StaffId && s.Date >= leave.StartDate && s.Date <= leave.EndDate)
+                .ToListAsync();
+
+            foreach (var schedule in schedules)
+            {
+                schedule.Notes = $"[LEAVE] {leave.LeaveType}";
+                schedule.Status = "On-Leave";
+                var slots = await _context.AppointmentSlots
+                    .Where(s => s.ScheduleId == schedule.Id && s.Status == "Available")
+                    .ToListAsync();
+                slots.ForEach(s => s.Status = "Blocked");
+            }
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task UnblockSchedulesAsync(Leave leave)
+        {
+            var schedules = await _context.Schedules
+                .Where(s => s.StaffId == leave.StaffId && s.Date >= leave.StartDate && s.Date <= leave.EndDate)
+                .ToListAsync();
+
+            foreach (var schedule in schedules)
+            {
+                schedule.Notes = schedule.Notes?.Replace($"[LEAVE] {leave.LeaveType}", "").Trim();
+                var slots = await _context.AppointmentSlots
+                    .Where(s => s.ScheduleId == schedule.Id && s.Status == "Blocked")
+                    .ToListAsync();
+                slots.ForEach(s => { if (s.CurrentBookings < s.MaxCapacity) s.Status = "Available"; });
+            }
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task CancelAppointmentsAsync(Leave leave)
+        {
+            var appointments = await _context.Appointments
+                .Where(a => a.StaffId == leave.StaffId &&
+                            a.AppointmentDate >= leave.StartDate &&
+                            a.AppointmentDate <= leave.EndDate &&
+                            a.Status != "Cancelled")
+                .ToListAsync();
+
+            foreach (var apt in appointments)
+            {
+                apt.Status = "Cancelled";
+                apt.Notes += $"\n[SYSTEM] Staff on {leave.LeaveType} leave";
+                if (apt.AppointmentSlotId.HasValue)
+                    await CancelAppointmentSlotBookingAsync(apt.AppointmentSlotId.Value);
+            }
+            await _context.SaveChangesAsync();
+        }
+
+        /*private async Task CreateLeaveTimeReportsAsync(Leave leave)
+        {
+            var current = leave.StartDate.Date;
+            while (current <= leave.EndDate.Date)
+            {
+                if (current.DayOfWeek != DayOfWeek.Saturday && current.DayOfWeek != DayOfWeek.Sunday)
+                {
+                    var exists = await _context.TimeReports.AnyAsync(tr => tr.StaffId == leave.StaffId && tr.ClockIn.Date == current);
+                    if (!exists)
+                    {
+                        _context.TimeReports.Add(new TimeReport
+                        {
+                            StaffId = leave.StaffId,
+                            ClockIn = current.AddHours(8),
+                            ClockOut = current.AddHours(17),
+                            HoursWorked = 8,
+                            ActivityType = $"Leave - {leave.LeaveType}",
+                            Notes = leave.Reason,
+                            ApprovalStatus = "Approved",
+                            ApprovedBy = leave.ApprovedBy,
+                            ApprovedAt = leave.ApprovedAt,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+                current = current.AddDays(1);
+            }
+            await _context.SaveChangesAsync();
+        }*/
+
+        private async Task RemoveLeaveTimeReportsAsync(Leave leave)
+        {
+            var reports = await _context.TimeReports
+                .Where(tr => tr.StaffId == leave.StaffId &&
+                             tr.ClockIn.Date >= leave.StartDate &&
+                             tr.ClockIn.Date <= leave.EndDate &&
+                             tr.ActivityType.StartsWith("Leave -"))
+                .ToListAsync();
+
+            _context.TimeReports.RemoveRange(reports);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<(bool Success, string Message)> ReturnLeaveToPendingAsync(int leaveId)
+        {
+            try
+            {
+                await EnsureAuthorizedAsync("AdminOnly", "return leave to pending");
+
+                var leave = await _context.Leaves
+                    .Include(l => l.Staff)
+                    .FirstOrDefaultAsync(l => l.Id == leaveId);
+
+                if (leave == null)
+                    return (false, "Leave not found");
+
+                if (leave.Status == LeaveStatus.Pending)
+                    return (false, "Leave is already pending");
+
+                if (leave.Status == LeaveStatus.Cancelled)
+                    return (false, "Cannot return cancelled leave to pending");
+
+                // If was approved, rollback effects
+                if (leave.Status == LeaveStatus.Approved)
+                {
+                    await UnblockSchedulesAsync(leave);
+                    await RemoveLeaveTimeReportsAsync(leave);
+
+                    // Restore leave balance
+                    await UpdateLeaveBalanceOnCancellationAsync(leave);
+                }
+
+                // Reset to pending
+                leave.Status = LeaveStatus.Pending;
+                leave.ApprovedBy = null;
+                leave.ApprovedAt = null;
+                leave.ApprovalNotes = null;
+                leave.RejectionReason = null;
+                leave.UpdatedAt = DateTime.UtcNow;
+
+                _context.Leaves.Update(leave);
+                await _context.SaveChangesAsync();
+
+                return (true, "Leave returned to pending status");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return (false, $"Access Denied: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Error: {ex.Message}");
+            }
+        }
+
+        public async Task<(bool Success, string Message)> DeleteLeaveAsync(int id)
+        {
+            try
+            {
+                await EnsureAuthorizedAsync("AdminOnly", "delete leave");
+
+                var leave = await _context.Leaves
+                    .Include(l => l.Staff)
+                    .FirstOrDefaultAsync(l => l.Id == id);
+
+                if (leave == null)
+                    return (false, "Leave not found");
+
+                // If leave is approved, rollback effects first
+                if (leave.Status == LeaveStatus.Approved)
+                {
+                    await UnblockSchedulesAsync(leave);
+                    await RemoveLeaveTimeReportsAsync(leave);
+                }
+
+                _context.Leaves.Remove(leave);
+                await _context.SaveChangesAsync();
+
+                return (true, "Leave deleted successfully");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return (false, $"Access Denied: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Error deleting leave: {ex.Message}");
+            }
+        }
+
+        #region Leave Balance Management
+
+        public async Task<LeaveBalance> GetOrCreateLeaveBalanceAsync(int staffId, int year)
+        {
+            var balance = await _context.LeaveBalances
+                .FirstOrDefaultAsync(lb => lb.StaffId == staffId && lb.Year == year);
+
+            if (balance == null)
+            {
+                var staff = await _context.Staff.FindAsync(staffId);
+                if (staff == null)
+                    throw new InvalidOperationException("Staff member not found");
+
+                balance = new LeaveBalance
+                {
+                    StaffId = staffId,
+                    Year = year,
+                    VacationDaysTotal = staff.Vacationdays,
+                    VacationDaysUsed = 0,
+                    VacationDaysRemaining = staff.Vacationdays,
+                    SickDaysUsed = 0,
+                    VABDaysUsed = 0,
+                    ParentalDaysUsed = 0,
+                    LastUpdated = DateTime.UtcNow
+                };
+
+                _context.LeaveBalances.Add(balance);
+                await _context.SaveChangesAsync();
+            }
+
+            return balance;
+        }
+
+        private async Task UpdateLeaveBalanceOnApprovalAsync(Leave leave)
+        {
+            var year = leave.StartDate.Year;
+            var balance = await GetOrCreateLeaveBalanceAsync(leave.StaffId, year);
+
+            // Update based on leave type
+            switch (leave.LeaveType)
+            {
+                case LeaveType.Vacation:
+                    balance.VacationDaysUsed += leave.TotalDays;
+                    balance.VacationDaysRemaining = balance.VacationDaysTotal - balance.VacationDaysUsed;
+                    break;
+                case LeaveType.Sick:
+                    balance.SickDaysUsed += leave.TotalDays;
+                    break;
+                case LeaveType.VAB:
+                    balance.VABDaysUsed += leave.TotalDays;
+                    break;
+                case LeaveType.Parental:
+                    balance.ParentalDaysUsed += leave.TotalDays;
+                    break;
+            }
+
+            balance.LastUpdated = DateTime.UtcNow;
+            _context.LeaveBalances.Update(balance);
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task UpdateLeaveBalanceOnCancellationAsync(Leave leave)
+        {
+            var year = leave.StartDate.Year;
+            var balance = await _context.LeaveBalances
+                .FirstOrDefaultAsync(lb => lb.StaffId == leave.StaffId && lb.Year == year);
+
+            if (balance == null) return;
+
+            // Restore based on leave type
+            switch (leave.LeaveType)
+            {
+                case LeaveType.Vacation:
+                    balance.VacationDaysUsed -= leave.TotalDays;
+                    if (balance.VacationDaysUsed < 0) balance.VacationDaysUsed = 0;
+                    balance.VacationDaysRemaining = balance.VacationDaysTotal - balance.VacationDaysUsed;
+                    break;
+                case LeaveType.Sick:
+                    balance.SickDaysUsed -= leave.TotalDays;
+                    if (balance.SickDaysUsed < 0) balance.SickDaysUsed = 0;
+                    break;
+                case LeaveType.VAB:
+                    balance.VABDaysUsed -= leave.TotalDays;
+                    if (balance.VABDaysUsed < 0) balance.VABDaysUsed = 0;
+                    break;
+                case LeaveType.Parental:
+                    balance.ParentalDaysUsed -= leave.TotalDays;
+                    if (balance.ParentalDaysUsed < 0) balance.ParentalDaysUsed = 0;
+                    break;
+            }
+
+            balance.LastUpdated = DateTime.UtcNow;
+            _context.LeaveBalances.Update(balance);
+            await _context.SaveChangesAsync();
+        }
+
+        #endregion
         #endregion
     }
 }

@@ -83,6 +83,7 @@
                             <option value="">All Statuses</option>
                             <option value="Scheduled">Scheduled</option>
                             <option value="Active">Active</option>
+                            <option value="On-Leave">On-Leave</option>
                             <option value="Completed">Completed</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
@@ -90,23 +91,35 @@
                 </div>
 
                 <!-- Statistics -->
-                <div class="row mt-3">
+                <div class="row mt-3 text-light">
                     <div class="col-md-4">
-                        <div class="text-center p-2 bg-primary bg-opacity-10 rounded">
+                        <div class="text-center p-2 bg-info bg-opacity-100 rounded">
                             <h6 class="mb-0">Total Schedules</h6>
                             <h4 class="mb-0">@filteredSchedules.Count</h4>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="text-center p-2 bg-success bg-opacity-10 rounded">
+                    <div class="col-md-2">
+                        <div class="text-center p-2 bg-success bg-opacity-100 rounded">
                             <h6 class="mb-0">Active</h6>
                             <h4 class="mb-0">@filteredSchedules.Count(s => s.Status == "Active")</h4>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="text-center p-2 bg-warning bg-opacity-10 rounded">
+                    <div class="col-md-2">
+                        <div class="text-center p-2 bg-primary bg-opacity-100 rounded">
                             <h6 class="mb-0">Scheduled</h6>
                             <h4 class="mb-0">@filteredSchedules.Count(s => s.Status == "Scheduled")</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-center p-2 bg-warning bg-opacity-100 rounded">
+                            <h6 class="mb-0">On-Leave</h6>
+                            <h4 class="mb-0">@filteredSchedules.Count(s => s.Status == "On-Leave")</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-center p-2 bg-secondary bg-opacity-100 rounded">
+                            <h6 class="mb-0">Completed</h6>
+                            <h4 class="mb-0">@filteredSchedules.Count(s => s.Status == "Completed")</h4>
                         </div>
                     </div>
                 </div>
@@ -125,6 +138,7 @@
                                      EndProperty="End"
                                      TextProperty="Text"
                                      AppointmentSelect="@OnAppointmentSelect"
+                                     AppointmentRender="@OnAppointmentRender"
                                      SlotSelect="@OnSlotSelect"
                                      CurrentDate="@currentDate"
                                      style="height: 768px;">
@@ -348,6 +362,20 @@
             ViewDetails(args.Data.ScheduleId);
         }
     }
+    
+    private void OnAppointmentRender(SchedulerAppointmentRenderEventArgs<ScheduleAppointmentData> args)
+    {
+        // Set background color based on status
+        args.Attributes["style"] = args.Data.Status switch
+        {
+            "Active" => "background: rgba(25, 135, 84, 1);",
+            "Scheduled" => "background: rgba(13, 110, 253, 1);",
+            "On-Leave" => "background: rgba(255, 193, 7, 1);",
+            "Completed" => "background: rgba(108, 117, 125, 1);",
+            "Cancelled" => "background: rgba(220, 53, 69, 1);",
+            _ => "background: rgba(248, 249, 250, 1);"
+        };
+    }
 
     private void OnSlotSelect(SchedulerSlotSelectEventArgs args)
     {
@@ -380,6 +408,7 @@
         {
             "Active" => "bg-success bg-opacity-25",
             "Scheduled" => "bg-primary bg-opacity-25",
+            "On-Leave" => "bg-warning bg-opacity-25",
             "Completed" => "bg-secondary bg-opacity-25",
             "Cancelled" => "bg-danger bg-opacity-25",
             _ => "bg-light"
