@@ -620,6 +620,12 @@
                                              s.Department.Contains("Neurology", StringComparison.OrdinalIgnoreCase) ||
                                              s.Department.Contains("Orthopedics", StringComparison.OrdinalIgnoreCase) ||
                                              s.Department.Contains("Dermatology", StringComparison.OrdinalIgnoreCase) ||
+                                             s.Department.Contains("Emergency", StringComparison.OrdinalIgnoreCase) ||
+                                             s.Department.Contains("ICU", StringComparison.OrdinalIgnoreCase) ||
+                                             s.Department.Contains("Surgery", StringComparison.OrdinalIgnoreCase) ||
+                                             s.Department.Contains("Radiology", StringComparison.OrdinalIgnoreCase) ||
+                                             s.Department.Contains("Laboratory", StringComparison.OrdinalIgnoreCase) ||
+                                             s.Department.Contains("Administration", StringComparison.OrdinalIgnoreCase) ||
                                              s.Department.Contains("General", StringComparison.OrdinalIgnoreCase)))
                 .ToList();
 
